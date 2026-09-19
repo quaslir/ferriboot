@@ -1,11 +1,8 @@
-use core::fmt::Write;
-use uefi::system;
+use crate::print::print_to_console;
 pub fn print_banner() {
-    system::with_stdout(|stdout| {
-        writeln!(stdout, "__            _ _                 _").unwrap();
-        writeln!(stdout, "/ _| ___ _ __ _(_) |__   ___   ___ | |_").unwrap();
-        writeln!(stdout, r"| |_ / _ \ '__| | | '_ \ / _ \ / _ \| __|").unwrap();
-        writeln!(stdout, "|  _|  __/ |  | | | |_) | (_) | (_) | |_").unwrap();
-        writeln!(stdout, r"|_|  \___|_|  |_|_|_.__/ \___/ \___/ \__|").unwrap();
-    });
+    print_to_console("__            _ _                 _");
+    print_to_console("/ _| ___ _ __ _(_) |__   ___   ___ | |_");
+    print_to_console(r"| |_ / _ \ '__| | | '_ \ / _ \ / _ \| __|");
+    print_to_console("|  _|  __/ |  | | | |_) | (_) | (_) | |_");
+    print_to_console(r"|_|  \___|_|  |_|_|_.__/ \___/ \___/ \__|");
 }
