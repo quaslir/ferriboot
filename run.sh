@@ -7,7 +7,7 @@ mkdir -p esp/EFI/BOOT
 cp target/x86_64-unknown-uefi/debug/bootloader.efi esp/EFI/BOOT/BOOTX64.EFI
 
 qemu-system-x86_64 \
-  -drive if=pflash,format=raw,readonly=on,file="$(brew --prefix qemu)/share/qemu/edk2-x86_64-code.fd" \
+  -drive if=pflash,format=raw,readonly=on,file="$(brew --prefix qemu)/usr/share/edk2/x64/OVMF_CODE.4m.fd" \
   -drive format=raw,file=fat:rw:esp \
   -serial stdio \
-  -m 512M
+-m 1024M
