@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 log = "0.4.34"
-uefi = { version = "0.40.0", features = ["logger", "panic_handler"] }
+uefi = { version = "0.40.0", features = ["logger", "panic_handler", "alloc", "global_allocator"] }
 elf = { path = "../elf" }
