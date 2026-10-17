@@ -1,6 +1,6 @@
 #[derive(Debug)]
 
-pub enum Error {
+pub enum ElfError {
     TooShort,
     BadMagic,
     UnsupportedClass,
