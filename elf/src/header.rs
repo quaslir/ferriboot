@@ -92,4 +92,12 @@ mod tests {
         assert_eq!(header.e_phentsize, 56);
         assert_eq!(header.e_phnum, 3);
     }
+
+    #[test] // Test on placeholder kernel
+
+    pub fn parser_test_kernel() {
+        let bytes = include_bytes!("../../target/x86_64-unknown-none/debug/kernel");
+        let header = parse_header(bytes).unwrap();
+        assert_eq!(header.e_entry, 0x100030);
+    }
 }
