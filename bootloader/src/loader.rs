@@ -1,16 +1,24 @@
+use elf::ElfHeader;
 use uefi::boot::{self, AllocateType, MemoryType};
+const PAGE_SIZE: u64 = 4096;
+const PAGE_ROUND_MASK: u64 = 0xFFF;
+const PT_LOAD: u32 = 1;
+fn program_header_at(
+    elf_bytes: &[u8],
+    header: &ElfHeader,
+    i: u16,
+) -> uefi::Result<elf::ProgramHeader> {
+    let offset = header.e_phoff as usize + i as usize * header.e_phentsize as usize;
+    elf::parse_program_header(&elf_bytes[offset..offset + header.e_phentsize as usize])
+        .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))
+}
 
-pub fn load_kernel(elf_bytes: &[u8]) -> uefi::Result<u64> {
-    let header =
-        elf::parse_header(elf_bytes).map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+fn bounds(elf_bytes: &[u8], header: &ElfHeader) -> uefi::Result<(u64, u64)> {
     let mut min = u64::MAX;
     let mut max = 0;
     for i in 0..header.e_phnum {
-        let offset = header.e_phoff as usize + i as usize * header.e_phentsize as usize;
-        let program_header =
-            elf::parse_program_header(&elf_bytes[offset..offset + header.e_phentsize as usize])
-                .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
-        if program_header.p_type != 1 {
+        let program_header = program_header_at(elf_bytes, &header, i)?;
+        if program_header.p_type != PT_LOAD {
             continue;
         }
 
@@ -21,9 +29,16 @@ pub fn load_kernel(elf_bytes: &[u8]) -> uefi::Result<u64> {
     if min == u64::MAX {
         return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
     }
-    min = min & !(0xFFF);
-    max = (max + 0xFFF) & !(0xFFF);
-    let pages = (max - min) / 4096;
+    min = min & !(PAGE_ROUND_MASK);
+    max = (max + PAGE_ROUND_MASK) & !(PAGE_ROUND_MASK);
+    Ok((min, max))
+}
+
+pub fn load_kernel(elf_bytes: &[u8]) -> uefi::Result<u64> {
+    let header =
+        elf::parse_header(elf_bytes).map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+    let (min, max) = bounds(elf_bytes, &header)?;
+    let pages = (max - min) / PAGE_SIZE;
     let _result = boot::allocate_pages(
         AllocateType::Address(min),
         MemoryType::LOADER_DATA,
@@ -31,10 +46,7 @@ pub fn load_kernel(elf_bytes: &[u8]) -> uefi::Result<u64> {
     )?;
 
     for i in 0..header.e_phnum {
-        let offset = header.e_phoff as usize + i as usize * header.e_phentsize as usize;
-        let program_header =
-            elf::parse_program_header(&elf_bytes[offset..offset + header.e_phentsize as usize])
-                .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+        let program_header = program_header_at(elf_bytes, &header, i)?;
         if program_header.p_type != 1 {
             continue;
         }
