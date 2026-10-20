@@ -45,7 +45,7 @@ fn main() -> Status {
         casted(boot_info);
     }
     */
-    linux::load_linux();
-    boot::stall(Duration::from_secs(10));
+    let image = linux::load_linux().unwrap();
+
     Status::SUCCESS
 }
