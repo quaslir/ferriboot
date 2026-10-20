@@ -41,6 +41,31 @@ const EXPECTED_BOOT_FLAG: u16 = 0xAA55;
 const EXPECTED_MAGIC: u32 = 0x53726448;
 const SUPPORTED_VERSION: u16 = 0x020C;
 const XLF_KERNEL_64: u16 = 1 << 0;
+
+// FRAMEBUFFER CONSTANTS
+
+const ORIG_VIDEO_IS_VGA_OFFSET: u8 = 0x0F;
+const LFB_WIDTH_OFFSET: u16 = 0x12;
+const LFB_HEIGHT_OFFSET: u16 = 0x14;
+const LFB_DEPTH_OFFSET: u16 = 0x16;
+const LFB_BASE_OFFSET: u32 = 0x18;
+const LFB_LINELENGTH_OFFSET: u16 = 0x24;
+const RED_SIZE_OFFSET: u8 = 0x26;
+const RED_POS_OFFSET: u8 = 0x27;
+const GREEN_SIZE_OFFSET: u8 = 0x28;
+const GREEN_POS_OFFSET: u8 = 0x29;
+const BLUE_SIZE_OFFSET: u8 = 0x2A;
+const BLUE_POS_OFFSET: u8 = 0x2B;
+const RSVD_SIZE_OFFSET: u8 = 0x2C;
+const RSVD_POS_OFFSET: u8 = 0x2D;
+const CAPABILITIES_OFFSET: u32 = 0x36;
+const EXT_LFB_BASE_OFFSET: u32 = 0x3A;
+
+const VIDEO_TYPE_EFI: u8 = 0x70;
+const VIDEO_CAPABILITY_64BIT_BASE: u32 = 1 << 1;
+const LFB_DEPTH_32: u32 = 32;
+const CHANNEL_SIZE: u32 = 8;
+
 fn read_u16(buf: &[u8], offset: usize) -> u16 {
     let value = buf[offset..offset + 2].try_into().unwrap();
     u16::from_le_bytes(value)
@@ -151,6 +176,21 @@ pub fn parse_setup_header(buffer: &[u8]) -> Result<SetupHeader, ParseError> {
         init_size,
         initrd_addr_max,
     })
+}
+
+pub fn fill_screen_info(
+    params: &mut [u8],
+    base: u64,
+    size: u64,
+    w: u16,
+    h: u16,
+    stride: u16,
+    is_bgr: bool,
+) -> Result<(), ParseError> {
+    params[ORIG_VIDEO_IS_VGA_OFFSET as usize] = VIDEO_TYPE_EFI;
+    write_u16(params, LFB_WIDTH_OFFSET as usize, w);
+    write_u16(params, LFB_HEIGHT_OFFSET as usize, h);
+    write_u16(params, , value);
 }
 
 #[cfg(test)]

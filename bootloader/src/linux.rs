@@ -1,4 +1,3 @@
-#![no_std]
 use core::slice::from_raw_parts;
 
 use crate::fs;
@@ -6,15 +5,14 @@ use uefi::table::cfg::ConfigTableEntry;
 use uefi::{
     boot::{self, MemoryType},
     cstr16,
-    table::Header,
 };
-
 pub struct LinuxImage {
     pub kernel_base: u64,
     pub initrd_addr: u64,
     pub initrd_size: usize,
     pub header: bzimage::SetupHeader,
     pub cmdline_addr: u64,
+    pub boot_params_addr: u64,
 }
 
 fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
@@ -98,14 +96,33 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
     if raw != initramfs_linux {
         return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
     }
-    drop(initramfs_linux);
+
+    let boot_params_page =
+        boot::allocate_pages(boot::AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)?.as_ptr();
+
+    unsafe { core::ptr::write_bytes(boot_params_page, 0, 4096) };
+    let span = unsafe { core::slice::from_raw_parts_mut(boot_params_page, 4096) };
     let cmdline_addr = load_cmdline(CMDLINE, header.cmdline_size as usize)?;
+    let rsdp_addr = find_rsdp()?;
+    let boot_params_addr = boot_params_page as u64;
+    bzimage::fill_boot_params(
+        span,
+        &vmlinuz_linux,
+        initrd_addr,
+        initrd_size,
+        cmdline_addr,
+        rsdp_addr,
+    )
+    .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+    drop(initramfs_linux);
+
     Ok(LinuxImage {
         kernel_base,
         initrd_addr,
         initrd_size,
         header,
         cmdline_addr,
+        boot_params_addr,
     })
 }
 
@@ -116,5 +133,6 @@ pub fn find_rsdp() -> uefi::Result<u64> {
             .find(|entry| entry.guid == ConfigTableEntry::ACPI2_GUID)
             .map(|page| page.address as u64)
     })
-    .ok_or(uefi::Error::from(uefi::Status::NOT_FOUND));
+    .ok_or(uefi::Error::from(uefi::Status::NOT_FOUND))?;
+    Ok(rsdp)
 }

@@ -47,5 +47,24 @@ fn main() -> Status {
     */
     let image = linux::load_linux().unwrap();
 
+    uefi::println!("[linux] kernel_base:  {:#x}", image.kernel_base);
+    uefi::println!(
+        "[linux] initrd:       {:#x}, size {:#x}",
+        image.initrd_addr,
+        image.initrd_size
+    );
+    uefi::println!("[linux] cmdline:      {:#x}", image.cmdline_addr);
+    uefi::println!("[linux] boot_params:  {:#x}", image.boot_params_addr);
+
+    let bp = unsafe { core::slice::from_raw_parts(image.boot_params_addr as *const u8, 4096) };
+    let rd32 = |off: usize| u32::from_le_bytes(bp[off..off + 4].try_into().unwrap());
+
+    uefi::println!("[bp] magic        {:#x} (expect 0x53726448)", rd32(0x202));
+    uefi::println!("[bp] type_loader  {:#x} (expect 0xff)", bp[0x210]);
+    uefi::println!("[bp] loadflags    {:#x} (bit0 = 1)", bp[0x211]);
+    uefi::println!("[bp] ramdisk_img  {:#x} (expect initrd)", rd32(0x218));
+    uefi::println!("[bp] ramdisk_size {:#x}", rd32(0x21C));
+    uefi::println!("[bp] cmd_line_ptr {:#x} (expect cmdline)", rd32(0x228));
+    boot::stall(Duration::from_millis(100000));
     Status::SUCCESS
 }
