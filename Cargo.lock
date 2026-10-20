@@ -23,6 +23,7 @@ name = "bootloader"
 version = "0.1.0"
 dependencies = [
  "boot_info",
+ "bzimage",
  "elf",
  "log",
  "uefi",
