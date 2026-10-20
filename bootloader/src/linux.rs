@@ -1,13 +1,13 @@
 #![no_std]
 use core::slice::from_raw_parts;
 
+use crate::fs;
+use uefi::table::cfg::ConfigTableEntry;
 use uefi::{
     boot::{self, MemoryType},
     cstr16,
     table::Header,
 };
-
-use crate::fs;
 
 pub struct LinuxImage {
     pub kernel_base: u64,
@@ -107,4 +107,14 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
         header,
         cmdline_addr,
     })
+}
+
+pub fn find_rsdp() -> uefi::Result<u64> {
+    let rsdp = uefi::system::with_config_table(|table| {
+        table
+            .iter()
+            .find(|entry| entry.guid == ConfigTableEntry::ACPI2_GUID)
+            .map(|page| page.address as u64)
+    })
+    .ok_or(uefi::Error::from(uefi::Status::NOT_FOUND));
 }

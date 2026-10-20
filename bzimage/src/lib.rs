@@ -1,5 +1,7 @@
 #![no_std]
 
+use core::u8;
+
 use crate::ParseError::{BadBootFlag, BadMagic, No64BitEntry, TooShort, UnsupportedVersion};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SetupHeader {
@@ -54,6 +56,42 @@ fn read_u64(buf: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes(value)
 }
 
+fn write_u16(buf: &mut [u8], offset: usize, value: u16) {
+    buf[offset..offset + 2].copy_from_slice(&u16::to_le_bytes(value));
+}
+fn write_u32(buf: &mut [u8], offset: usize, value: u32) {
+    buf[offset..offset + 4].copy_from_slice(&u32::to_le_bytes(value));
+}
+fn write_u64(buf: &mut [u8], offset: usize, value: u64) {
+    buf[offset..offset + 8].copy_from_slice(&u64::to_le_bytes(value));
+}
+pub fn fill_boot_params(
+    params: &mut [u8],
+    kernel: &[u8],
+    initrd_addr: u64,
+    initrd_size: usize,
+    cmdline_addr: u64,
+    rsdp_addr: u64,
+) -> Result<(), ParseError> {
+    if params.len() < 4096 {
+        return Err(TooShort);
+    }
+
+    let header = parse_setup_header(kernel)?;
+    let mut copy_limit: usize = 0x202;
+    copy_limit += kernel[0x201] as usize;
+    params[0x1F1..copy_limit].copy_from_slice(&kernel[0x1F1..copy_limit]);
+    params[0x210] = 0xFF; // Unknown bootloader (custom value)
+    params[0x211] |= 1 << 0;
+    write_u32(params, 0x218, initrd_addr as u32);
+    write_u32(params, 0x21C, initrd_size as u32);
+    write_u32(params, 0x0C0, (initrd_addr >> 32) as u32);
+    write_u32(params, 0x0C4, (initrd_size >> 32) as u32);
+    write_u32(params, 0x228, cmdline_addr as u32);
+    write_u32(params, 0x0C8, (cmdline_addr >> 32) as u32);
+    write_u64(params, 0x270, rsdp_addr);
+    Ok(())
+}
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     TooShort,
@@ -119,8 +157,8 @@ pub fn parse_setup_header(buffer: &[u8]) -> Result<SetupHeader, ParseError> {
 
 mod tests {
     use crate::{
-        ParseError::{self},
-        parse_setup_header,
+        ParseError::{self, BadBootFlag},
+        fill_boot_params, parse_setup_header, read_u16, read_u32, read_u64,
     };
 
     #[test]
@@ -187,5 +225,51 @@ mod tests {
         buffer[crate::XLOADFLAGS_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::No64BitEntry)));
+    }
+
+    #[test]
+
+    pub fn fill_boot_params_test() {
+        let mut arr: [u8; 4096] = [0u8; 4096];
+        let buffer = include_bytes!("../tests/vmlinuz");
+        let result = fill_boot_params(
+            &mut arr,
+            buffer,
+            0x0000_0001_2340_0000,
+            0x0000_0002_0649_CE6F,
+            0x0000_0003_0001_0000,
+            0x0000_0000_7FB7_E014,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(read_u32(&arr, 0x202), 0x5372_6448);
+        assert_eq!(read_u16(&arr, 0x206), 0x020F);
+        assert_eq!(arr[0x210], 0xFF);
+        assert_eq!(arr[0x211] & 1, 1);
+        assert_eq!(read_u32(&arr, 0x218), 0x2340_0000);
+        assert_eq!(read_u32(&arr, 0x0C0), 0x1);
+        assert_eq!(read_u32(&arr, 0x21C), 0x0649_CE6F);
+        assert_eq!(read_u32(&arr, 0x0C4), 0x2);
+        assert_eq!(read_u32(&arr, 0x228), 0x0001_0000);
+        assert_eq!(read_u32(&arr, 0x0C8), 0x3);
+        assert_eq!(read_u64(&arr, 0x270), 0x7FB7_E014);
+    }
+
+    #[test]
+
+    pub fn incorrect_boot_params() {
+        let mut arr: [u8; 4096] = [0u8; 4096];
+        let buffer: [u8; 65536] = [0u8; 65536];
+        let result = fill_boot_params(
+            &mut arr,
+            &buffer,
+            0x0000_0001_2340_0000,
+            0x0000_0002_0649_CE6F,
+            0x0000_0003_0001_0000,
+            0x0000_0000_7FB7_E014,
+        );
+
+        assert_eq!(result, Err(BadBootFlag));
+        assert_eq!(arr.iter().all(|v| v == &0u8), true);
     }
 }
