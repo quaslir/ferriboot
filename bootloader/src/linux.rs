@@ -4,11 +4,42 @@ use core::slice::from_raw_parts;
 use uefi::{
     boot::{self, MemoryType},
     cstr16,
+    table::Header,
 };
 
 use crate::fs;
+
+pub struct LinuxImage {
+    pub kernel_base: u64,
+    pub initrd_addr: u64,
+    pub initrd_size: usize,
+    pub header: bzimage::SetupHeader,
+    pub cmdline_addr: u64,
+}
+
+fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
+    if cmd.len() > max_len {
+        return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
+    }
+
+    let page = boot::allocate_pages(
+        boot::AllocateType::MaxAddress(0xFFFF_FFFF),
+        MemoryType::LOADER_DATA,
+        1,
+    )?
+    .as_ptr();
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(cmd.as_bytes().as_ptr(), page, cmd.len());
+        core::ptr::write(page.add(cmd.len()), 0);
+    }
+
+    Ok(page as u64)
+}
+
 const ADDRESS_ALIGNMENT_MASK: u64 = 0x1FFFFF;
-pub fn load_linux() -> uefi::Result<()> {
+const CMDLINE: &str = "console=ttyS0 earlyprintk=serial,ttyS0,115200 ignore_loglevel";
+pub fn load_linux() -> uefi::Result<LinuxImage> {
     let vmlinuz_linux = fs::read_file(cstr16!("vmlinuz-linux"))?;
     let initramfs_linux = fs::read_file(cstr16!("initramfs-linux.img"))?;
     let header = bzimage::parse_setup_header(&vmlinuz_linux)
@@ -68,5 +99,12 @@ pub fn load_linux() -> uefi::Result<()> {
         return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
     }
     drop(initramfs_linux);
-    Ok(())
+    let cmdline_addr = load_cmdline(CMDLINE, header.cmdline_size as usize)?;
+    Ok(LinuxImage {
+        kernel_base,
+        initrd_addr,
+        initrd_size,
+        header,
+        cmdline_addr,
+    })
 }
