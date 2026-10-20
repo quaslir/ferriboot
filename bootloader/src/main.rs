@@ -4,19 +4,22 @@ mod console;
 mod firmware;
 mod graphics;
 mod print;
+use core::time::Duration;
+
 use boot_info::{BootInfo, Framebuffer};
 use uefi::{
     boot::{AllocateType, MemoryType},
     prelude::*,
 };
 mod fs;
+mod linux;
 mod loader;
 mod memory;
 extern crate alloc;
 #[entry]
 fn main() -> Status {
     uefi::helpers::init().unwrap();
-    console::print_banner();
+    /*console::print_banner();
     firmware::print_firmware_info();
     let kernel_buffer = fs::read_file(cstr16!("kernel.elf")).unwrap();
     let entry = loader::load_kernel(&kernel_buffer).unwrap();
@@ -41,6 +44,8 @@ fn main() -> Status {
         let casted: extern "sysv64" fn(*const BootInfo) -> ! = core::mem::transmute(entry as usize);
         casted(boot_info);
     }
-
+    */
+    linux::load_linux();
+    boot::stall(Duration::from_secs(10));
     Status::SUCCESS
 }
