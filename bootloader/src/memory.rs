@@ -2,8 +2,7 @@ use uefi::Error;
 
 use uefi::{
     boot::{self, MemoryType},
-    mem::memory_map::{MemoryMap, MemoryMapOwned},
-    println,
+    mem::memory_map::MemoryMap,
 };
 
 pub fn print_memory_info() -> Result<(), Error> {

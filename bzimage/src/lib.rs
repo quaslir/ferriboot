@@ -23,6 +23,23 @@ impl SetupHeader {
         return (self.setup_sects as usize + 1) * 512;
     }
 }
+#[derive(Debug, Clone, Copy)]
+pub struct E820Entry {
+    pub addr: u64,
+    pub size: u64,
+    pub typ: u32,
+}
+
+const E820_ENTRIES_OFFSET: usize = 0x1E8;
+const E820_TABLE_OFFSET: usize = 0x2D0;
+const E820_ENTRY_SIZE: usize = 20;
+const E820_MAX_ENTRIES: usize = 128;
+const E820_RAM: u8 = 1;
+const E820_RESERVED: u8 = 2;
+const E820_ACPI: u8 = 3;
+const E820_NVS: u8 = 4;
+const E820_UNUSABLE: u8 = 5;
+const E820_PMEM: u8 = 7;
 
 const SETUP_SECTS_OFFSET: usize = 0x1F1;
 const BOOT_FLAG_OFFSET: usize = 0x1FE;
@@ -122,6 +139,7 @@ pub enum ParseError {
     UnsupportedVersion,
     No64BitEntry,
     FramebufferError,
+    TooManyE820Entries,
 }
 
 pub fn parse_setup_header(buffer: &[u8]) -> Result<SetupHeader, ParseError> {
@@ -221,6 +239,23 @@ pub fn fill_screen_info(
             VIDEO_CAPABILITY_64BIT_BASE,
         );
     }
+    Ok(())
+}
+
+pub fn fill_e820(params: &mut [u8], entries: &[E820Entry]) -> Result<(), ParseError> {
+    if entries.len() > E820_MAX_ENTRIES {
+        return Err(ParseError::TooManyE820Entries);
+    }
+
+    params[E820_ENTRIES_OFFSET] = entries.len() as u8;
+
+    for (i, entry) in entries.iter().enumerate() {
+        let offset = E820_TABLE_OFFSET + i * E820_ENTRY_SIZE;
+        write_u64(params, offset, entry.addr);
+        write_u64(params, offset + 8, entry.size);
+        write_u32(params, offset + 16, entry.typ);
+    }
+
     Ok(())
 }
 
