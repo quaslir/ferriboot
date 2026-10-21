@@ -1,3 +1,3 @@
 [workspace]
-members = ["boot_info","bootloader", "bzimage", "elf", "kernel"]
+members = ["boot_info","bootloader", "bzimage", "config", "elf", "kernel"]
 resolver = "2"
