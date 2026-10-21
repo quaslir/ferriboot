@@ -1,6 +1,7 @@
 #![no_std]
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelFormat {
     Rgb = 0,
     Bgr = 1,

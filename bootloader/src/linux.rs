@@ -1,6 +1,7 @@
 use core::slice::from_raw_parts;
 
 use crate::fs;
+use crate::graphics;
 use uefi::table::cfg::ConfigTableEntry;
 use uefi::{
     boot::{self, MemoryType},
@@ -115,6 +116,24 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
     )
     .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
     drop(initramfs_linux);
+
+    let graphics_info = graphics::graphics_info();
+
+    match graphics_info {
+        Ok(graphics) => {
+            bzimage::fill_screen_info(
+                span,
+                graphics.base,
+                graphics.size as u64,
+                graphics.width as u16,
+                graphics.height as u16,
+                graphics.stride as u16,
+                graphics.pixel_format == boot_info::PixelFormat::Bgr,
+            )
+            .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+        }
+        Err(_) => {}
+    }
 
     Ok(LinuxImage {
         kernel_base,
