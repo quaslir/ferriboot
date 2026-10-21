@@ -9,7 +9,7 @@ use core::time::Duration;
 use boot_info::{BootInfo, Framebuffer};
 use bzimage::fill_screen_info;
 use uefi::{
-    boot::{AllocateType, MemoryType},
+    boot::{AllocateType, MemoryType, exit_boot_services},
     prelude::*,
     proto::console::gop::PixelFormat,
 };
@@ -49,7 +49,12 @@ fn main() -> Status {
     */
 
     let image = linux::load_linux().unwrap();
-
-    boot::stall(Duration::from_millis(10000));
-    Status::SUCCESS
+    unsafe {
+        let mut map = exit_boot_services(Some(MemoryType::LOADER_DATA));
+        let mut entries = [bzimage::E820Entry::default(); bzimage::E820_MAX_ENTRIES];
+        let size = memory::build_e820(&mut map, &mut entries).unwrap();
+        let raw = core::slice::from_raw_parts_mut(image.boot_params_addr as *mut u8, 4096);
+        bzimage::fill_e820(raw, &entries).unwrap();
+        linux::boot_linux(image.kernel_base, image.boot_params_addr);
+    }
 }

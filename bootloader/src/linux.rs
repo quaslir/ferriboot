@@ -105,6 +105,16 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
     let span = unsafe { core::slice::from_raw_parts_mut(boot_params_page, 4096) };
     let cmdline_addr = load_cmdline(CMDLINE, header.cmdline_size as usize)?;
     let rsdp_addr = find_rsdp()?;
+    uefi::println!("RSDP from config table: {:#x}", rsdp_addr);
+    if rsdp_addr != 0 {
+        let sig = unsafe { core::slice::from_raw_parts(rsdp_addr as *const u8, 8) };
+        let rev = unsafe { *(rsdp_addr as *const u8).add(15) };
+        uefi::println!(
+            "  signature = {:?}, revision = {}",
+            core::str::from_utf8(sig),
+            rev
+        );
+    }
     let boot_params_addr = boot_params_page as u64;
     bzimage::fill_boot_params(
         span,
@@ -115,6 +125,8 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
         rsdp_addr,
     )
     .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+    let bp_rsdp = u64::from_le_bytes(span[0x070..0x078].try_into().unwrap());
+    uefi::println!("boot_params.acpi_rsdp_addr @0x070 = {:#x}", bp_rsdp);
     drop(initramfs_linux);
 
     let graphics_info = graphics::graphics_info();
@@ -154,4 +166,11 @@ pub fn find_rsdp() -> uefi::Result<u64> {
     })
     .ok_or(uefi::Error::from(uefi::Status::NOT_FOUND))?;
     Ok(rsdp)
+}
+
+pub unsafe fn boot_linux(kernel_base: u64, boot_params: u64) -> ! {
+    let jump_addr = kernel_base + 0x200;
+    unsafe {
+        core::arch::asm!("cli", "jmp {}", in(reg) jump_addr, in("rsi") boot_params, options(noreturn));
+    }
 }
