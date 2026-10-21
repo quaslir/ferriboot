@@ -1,4 +1,5 @@
-use bzimage::E820Entry;
+use bzimage::e820;
+use bzimage::e820::E820Entry;
 use uefi::Error;
 
 use uefi::mem::memory_map::{MemoryMapMut, MemoryMapOwned};
@@ -29,19 +30,16 @@ pub fn to_e820_type(typ: MemoryType) -> u32 {
         | MemoryType::LOADER_CODE
         | MemoryType::LOADER_DATA
         | MemoryType::BOOT_SERVICES_CODE
-        | MemoryType::BOOT_SERVICES_DATA => bzimage::E820_RAM,
-        MemoryType::ACPI_RECLAIM => bzimage::E820_ACPI,
-        MemoryType::ACPI_NON_VOLATILE => bzimage::E820_NVS,
-        MemoryType::UNUSABLE => bzimage::E820_UNUSABLE,
-        MemoryType::PERSISTENT_MEMORY => bzimage::E820_PMEM,
-        _ => bzimage::E820_RESERVED,
+        | MemoryType::BOOT_SERVICES_DATA => bzimage::e820::E820_RAM,
+        MemoryType::ACPI_RECLAIM => bzimage::e820::E820_ACPI,
+        MemoryType::ACPI_NON_VOLATILE => bzimage::e820::E820_NVS,
+        MemoryType::UNUSABLE => bzimage::e820::E820_UNUSABLE,
+        MemoryType::PERSISTENT_MEMORY => bzimage::e820::E820_PMEM,
+        _ => bzimage::e820::E820_RESERVED,
     }
 }
 
-pub fn build_e820(
-    map: &mut MemoryMapOwned,
-    out: &mut [bzimage::E820Entry; 128],
-) -> uefi::Result<usize> {
+pub fn build_e820(map: &mut MemoryMapOwned, out: &mut [E820Entry; 128]) -> uefi::Result<usize> {
     map.sort();
     let mut count = 0;
     for desc in map.entries() {
@@ -57,7 +55,7 @@ pub fn build_e820(
             continue;
         }
 
-        if count == bzimage::E820_MAX_ENTRIES {
+        if count == bzimage::e820::E820_MAX_ENTRIES {
             return Err(uefi::Error::from(uefi::Status::BUFFER_TOO_SMALL));
         }
         out[count] = E820Entry { addr, size, typ };

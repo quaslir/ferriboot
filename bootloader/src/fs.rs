@@ -1,3 +1,5 @@
+use core::u8;
+
 use alloc::vec;
 use alloc::vec::Vec;
 use uefi::Error;
@@ -7,19 +9,34 @@ use uefi::proto::media::file::File;
 use uefi::proto::media::file::FileAttribute;
 use uefi::proto::media::file::FileInfo;
 use uefi::proto::media::file::FileMode;
-pub fn read_file(filename: &CStr16) -> uefi::Result<Vec<u8>> {
+use uefi::proto::media::file::RegularFile;
+pub fn open_file(filename: &CStr16) -> uefi::Result<RegularFile> {
     let handle = boot::image_handle();
     let mut system = boot::get_image_file_system(handle)?;
     let mut root = system.open_volume()?;
     let result = root.open(filename, FileMode::Read, FileAttribute::empty())?;
-    let mut regular = result
+    let regular = result
         .into_regular_file()
         .ok_or_else(|| Error::from(uefi::Status::LOAD_ERROR))?;
-    let bxinfo = regular.get_boxed_info::<FileInfo>()?;
-    let mut buffer = vec![0; bxinfo.file_size() as usize];
-    let bytes_read = regular.read(&mut buffer)?;
-    if bytes_read != bxinfo.file_size() as usize {
-        return Err(uefi::Error::from(uefi::Status::END_OF_FILE));
+    Ok(regular)
+}
+
+pub fn read_file(file: &mut RegularFile, buffer: &mut [u8]) -> uefi::Result<()> {
+    let mut count = 0;
+
+    while count < buffer.len() {
+        let read = file
+            .read(&mut buffer[count..])
+            .map_err(|e| uefi::Error::from(e.status()))?;
+        if read == 0 {
+            return Err(uefi::Error::from(uefi::Status::END_OF_FILE));
+        }
+        count += read;
     }
-    Ok(buffer)
+    Ok(())
+}
+
+pub fn file_size(file: &mut RegularFile) -> uefi::Result<usize> {
+    let size = file.get_boxed_info::<FileInfo>()?.file_size();
+    Ok(size as usize)
 }

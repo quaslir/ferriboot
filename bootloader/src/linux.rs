@@ -37,11 +37,19 @@ fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
 }
 
 const ADDRESS_ALIGNMENT_MASK: u64 = 0x1FFFFF;
-const CMDLINE: &str = "console=ttyS0 earlyprintk=serial,ttyS0,115200 ignore_loglevel";
+const CMDLINE: &str =
+    "root=UUID=59e66047-5416-4f4f-93db-8830e487783a rw rootflags=subvol=@ nvidia-drm.modeset=1";
 pub fn load_linux() -> uefi::Result<LinuxImage> {
-    let vmlinuz_linux = fs::read_file(cstr16!("vmlinuz-linux"))?;
-    let initramfs_linux = fs::read_file(cstr16!("initramfs-linux.img"))?;
-    let header = bzimage::parse_setup_header(&vmlinuz_linux)
+    let mut vmlinuz_linux_file = fs::open_file(cstr16!("vmlinuz-linux"))?;
+    let mut initramfs_linux_file = fs::open_file(cstr16!("initramfs-linux.img"))?;
+
+    let vmlinuz_linux_size = fs::file_size(&mut vmlinuz_linux_file)?;
+    let initramfs_linux_size = fs::file_size(&mut initramfs_linux_file)?;
+
+    let mut vmlinuz_linux = alloc::vec![0u8; vmlinuz_linux_size];
+
+    fs::read_file(&mut vmlinuz_linux_file, &mut vmlinuz_linux)?;
+    let header = bzimage::setup::parse_setup_header(&vmlinuz_linux)
         .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
 
     let allocated = boot::allocate_pages(
@@ -82,58 +90,42 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
     let initrd_ptr = boot::allocate_pages(
         boot::AllocateType::MaxAddress(header.initrd_addr_max as u64),
         MemoryType::LOADER_DATA,
-        initramfs_linux.len().div_ceil(4096),
+        initramfs_linux_size.div_ceil(4096),
     )?
     .as_ptr();
-    unsafe {
-        core::ptr::copy_nonoverlapping(initramfs_linux.as_ptr(), initrd_ptr, initramfs_linux.len());
-    }
     let initrd_addr = initrd_ptr as u64;
-    let initrd_size = initramfs_linux.len();
-    let raw = unsafe { from_raw_parts(initrd_ptr, initrd_size) };
-    if initrd_addr as usize + initrd_size - 1 > header.initrd_addr_max as usize {
+    let initramfs = unsafe { core::slice::from_raw_parts_mut(initrd_ptr, initramfs_linux_size) };
+
+    if initrd_addr as usize + initramfs_linux_size - 1 > header.initrd_addr_max as usize {
         return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
     }
-    if raw != initramfs_linux {
-        return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
-    }
+
+    fs::read_file(&mut initramfs_linux_file, initramfs)?;
 
     let boot_params_page =
         boot::allocate_pages(boot::AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)?.as_ptr();
 
     unsafe { core::ptr::write_bytes(boot_params_page, 0, 4096) };
     let span = unsafe { core::slice::from_raw_parts_mut(boot_params_page, 4096) };
+
     let cmdline_addr = load_cmdline(CMDLINE, header.cmdline_size as usize)?;
     let rsdp_addr = find_rsdp()?;
-    uefi::println!("RSDP from config table: {:#x}", rsdp_addr);
-    if rsdp_addr != 0 {
-        let sig = unsafe { core::slice::from_raw_parts(rsdp_addr as *const u8, 8) };
-        let rev = unsafe { *(rsdp_addr as *const u8).add(15) };
-        uefi::println!(
-            "  signature = {:?}, revision = {}",
-            core::str::from_utf8(sig),
-            rev
-        );
-    }
     let boot_params_addr = boot_params_page as u64;
-    bzimage::fill_boot_params(
+    bzimage::setup::fill_boot_params(
         span,
         &vmlinuz_linux,
         initrd_addr,
-        initrd_size,
+        initramfs_linux_size,
         cmdline_addr,
         rsdp_addr,
     )
     .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
-    let bp_rsdp = u64::from_le_bytes(span[0x070..0x078].try_into().unwrap());
-    uefi::println!("boot_params.acpi_rsdp_addr @0x070 = {:#x}", bp_rsdp);
-    drop(initramfs_linux);
 
     let graphics_info = graphics::graphics_info();
 
     match graphics_info {
         Ok(graphics) => {
-            bzimage::fill_screen_info(
+            bzimage::screen_info::fill_screen_info(
                 span,
                 graphics.base,
                 graphics.size as u64,
@@ -150,7 +142,7 @@ pub fn load_linux() -> uefi::Result<LinuxImage> {
     Ok(LinuxImage {
         kernel_base,
         initrd_addr,
-        initrd_size,
+        initrd_size: initramfs_linux_size,
         header,
         cmdline_addr,
         boot_params_addr,
