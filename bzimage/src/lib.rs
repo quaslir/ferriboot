@@ -23,23 +23,23 @@ impl SetupHeader {
         return (self.setup_sects as usize + 1) * 512;
     }
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct E820Entry {
     pub addr: u64,
     pub size: u64,
     pub typ: u32,
 }
 
-const E820_ENTRIES_OFFSET: usize = 0x1E8;
-const E820_TABLE_OFFSET: usize = 0x2D0;
-const E820_ENTRY_SIZE: usize = 20;
-const E820_MAX_ENTRIES: usize = 128;
-const E820_RAM: u8 = 1;
-const E820_RESERVED: u8 = 2;
-const E820_ACPI: u8 = 3;
-const E820_NVS: u8 = 4;
-const E820_UNUSABLE: u8 = 5;
-const E820_PMEM: u8 = 7;
+pub const E820_ENTRIES_OFFSET: usize = 0x1E8;
+pub const E820_TABLE_OFFSET: usize = 0x2D0;
+pub const E820_ENTRY_SIZE: usize = 20;
+pub const E820_MAX_ENTRIES: usize = 128;
+pub const E820_RAM: u32 = 1;
+pub const E820_RESERVED: u32 = 2;
+pub const E820_ACPI: u32 = 3;
+pub const E820_NVS: u32 = 4;
+pub const E820_UNUSABLE: u32 = 5;
+pub const E820_PMEM: u32 = 7;
 
 const SETUP_SECTS_OFFSET: usize = 0x1F1;
 const BOOT_FLAG_OFFSET: usize = 0x1FE;
@@ -128,7 +128,7 @@ pub fn fill_boot_params(
     write_u32(params, 0x0C4, (initrd_size >> 32) as u32);
     write_u32(params, 0x228, cmdline_addr as u32);
     write_u32(params, 0x0C8, (cmdline_addr >> 32) as u32);
-    write_u64(params, 0x270, rsdp_addr);
+    write_u64(params, 0x070, rsdp_addr);
     Ok(())
 }
 #[derive(Debug, PartialEq)]
@@ -358,7 +358,7 @@ mod tests {
         assert_eq!(read_u32(&arr, 0x0C4), 0x2);
         assert_eq!(read_u32(&arr, 0x228), 0x0001_0000);
         assert_eq!(read_u32(&arr, 0x0C8), 0x3);
-        assert_eq!(read_u64(&arr, 0x270), 0x7FB7_E014);
+        assert_eq!(read_u64(&arr, 0x070), 0x7FB7_E014);
     }
 
     #[test]
