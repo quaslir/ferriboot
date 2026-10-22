@@ -44,13 +44,14 @@ fn main() -> Status {
         return Status::ABORTED;
     }
 
-    banner::print_banner();
     let load_config = conf::load_config();
     let conf = match load_config {
         Ok(c) => c,
         Err(e) => return fail(e),
     };
-    let load_linux = linux::load_linux(conf.default_entry());
+
+    let index = menu::select_entry(&conf);
+    let load_linux = linux::load_linux(&conf.entries[index]);
 
     let image = match load_linux {
         Ok(img) => img,
