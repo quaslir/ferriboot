@@ -5,7 +5,6 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::ErrorKind::{MissingColon, NoEntries};
 extern crate alloc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
@@ -232,4 +231,211 @@ pub fn parse(text: &str) -> Result<Config, ConfigError> {
         default,
         entries,
     })
+}
+
+#[cfg(test)]
+
+mod tests {
+    use alloc::format;
+
+    use crate::*;
+    const BASE: &str = "/Arch\nprotocol: linux\nkernel: vmlinuz";
+
+    const FULL: &str = "# ferriboot test config\n\
+    timeout: 5\n\
+    default: 2\n\
+    \n\
+    /Arch Linux\n\
+        protocol: linux\n\
+        kernel: vmlinuz-linux\n\
+        initrd: initramfs-linux.img\n\
+        cmdline: root=UUID=1234 rw console=ttyS0,115200:8n1\n\
+    \n\
+    /Arch Linux (fallback)\n\
+        protocol: linux\n\
+        kernel: vmlinuz-linux\n";
+
+    fn append(extra: &str) -> String {
+        format!("{}\n{}", BASE, extra)
+    }
+
+    fn prepend(extra: &str) -> String {
+        format!("{}\n{}", extra, BASE)
+    }
+    #[test]
+
+    pub fn min_config() {
+        let result = parse(BASE);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.timeout, 3);
+        assert_eq!(parsed.default, 0);
+        assert_eq!(parsed.entries.len(), 1);
+        assert_eq!(parsed.entries[0].name, "Arch");
+        assert_eq!(parsed.entries[0].kernel, "vmlinuz");
+        assert_eq!(parsed.entries[0].protocol, Protocol::Linux);
+    }
+
+    #[test]
+
+    pub fn full_working_config() {
+        let result = parse(FULL);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.timeout, 5);
+        assert_eq!(parsed.default, 1);
+        let entries = parsed.entries;
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].protocol, Protocol::Linux);
+        assert_eq!(entries[0].name, "Arch Linux");
+        assert_eq!(entries[0].kernel, "vmlinuz-linux");
+        assert_eq!(
+            entries[0].cmdline.as_deref(),
+            Some("root=UUID=1234 rw console=ttyS0,115200:8n1")
+        );
+        assert_eq!(entries[0].initrd.as_deref(), Some("initramfs-linux.img"));
+
+        assert_eq!(entries[1].protocol, Protocol::Linux);
+        assert_eq!(entries[1].name, "Arch Linux (fallback)");
+        assert_eq!(entries[1].kernel, "vmlinuz-linux");
+        assert_eq!(entries[1].cmdline, None);
+        assert_eq!(entries[1].initrd, None);
+    }
+
+    #[test]
+
+    pub fn key_outside_entry() {
+        let config = prepend("kernel: vmlinuz");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 1,
+                kind: ErrorKind::KeyOutsideEntry
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn global_key_inside_entry() {
+        let config = append("timeout: 5");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 4,
+                kind: ErrorKind::GlobalKeyInsideEntry
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn unknown_key() {
+        let config = append("kernal: vmlinuz");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 4,
+                kind: ErrorKind::UnknownKey
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn missing_colon() {
+        let config = append("kernal vmlinuz");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 4,
+                kind: ErrorKind::MissingColon
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn invalid_number() {
+        let config = prepend("timeout: abc");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 1,
+                kind: ErrorKind::InvalidNumber
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn unknown_protocol() {
+        let config = append("protocol: windows");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 4,
+                kind: ErrorKind::UnknownProtocol
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn missing_kernel() {
+        let result = parse("/Arch\nprotocol: linux");
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 1,
+                kind: ErrorKind::MissingKernel
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn missing_protocol() {
+        let result = parse("/Arch\nkernel: vmlinuz");
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 1,
+                kind: ErrorKind::MissingProtocol
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn no_entries() {
+        let result = parse("");
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 0,
+                kind: ErrorKind::NoEntries
+            })
+        );
+    }
+
+    #[test]
+
+    pub fn default_out_of_range() {
+        let config = prepend("default: 5");
+        let result = parse(&config);
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 0,
+                kind: ErrorKind::DefaultOutOfRange
+            })
+        );
+    }
 }
