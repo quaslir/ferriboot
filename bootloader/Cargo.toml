@@ -9,3 +9,4 @@ uefi = { version = "0.40.0", features = ["logger", "panic_handler", "alloc", "gl
 elf = { path = "../elf" }
 boot_info = { version = "0.1.0", path = "../boot_info" }
 bzimage = { version = "0.1.0", path = "../bzimage" }
+config = { version = "0.1.0", path = "../config" }

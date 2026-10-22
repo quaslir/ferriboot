@@ -24,6 +24,7 @@ version = "0.1.0"
 dependencies = [
  "boot_info",
  "bzimage",
+ "config",
  "elf",
  "log",
  "uefi",
