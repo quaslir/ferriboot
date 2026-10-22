@@ -67,13 +67,34 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
         );
         e
     })?;
-    let vmlinuz_linux_size = fs::file_size(&mut vmlinuz_linux_file)?;
+    let vmlinuz_linux_size = fs::file_size(&mut vmlinuz_linux_file).map_err(|e| {
+        uefi::println!(
+            "ferriboot: cannot read kernel '{}' ({:?})",
+            entry.kernel,
+            e.status()
+        );
+        e
+    })?;
 
     let mut vmlinuz_linux = alloc::vec![0u8; vmlinuz_linux_size];
 
-    fs::read_file(&mut vmlinuz_linux_file, &mut vmlinuz_linux)?;
-    let header = bzimage::setup::parse_setup_header(&vmlinuz_linux)
-        .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+    fs::read_file(&mut vmlinuz_linux_file, &mut vmlinuz_linux).map_err(|e| {
+        uefi::println!(
+            "ferriboot: cannot read kernel '{}' ({:?})",
+            entry.kernel,
+            e.status()
+        );
+        e
+    })?;
+
+    let header = bzimage::setup::parse_setup_header(&vmlinuz_linux).map_err(|e| {
+        uefi::println!(
+            "ferriboot: '{}' is not a valid Linux bzImage ({:?})",
+            entry.kernel,
+            e
+        );
+        uefi::Error::from(uefi::Status::LOAD_ERROR)
+    })?;
 
     let allocated = boot::allocate_pages(
         boot::AllocateType::Address(header.pref_address),
@@ -85,6 +106,9 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
         Ok(ptr) => ptr.as_ptr() as u64,
         Err(_) => {
             if header.relocatable_kernel == 0 {
+                uefi::println!(
+                    "ferriboot: kernel is not relocatable and its preferred address is in use"
+                );
                 return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
             }
             let page_count = (header.init_size + header.kernel_alignment).div_ceil(4096);
@@ -93,7 +117,14 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
                 boot::AllocateType::AnyPages,
                 MemoryType::LOADER_DATA,
                 page_count as usize,
-            )?
+            )
+            .map_err(|e| {
+                uefi::println!(
+                    "ferriboot: cannot allocate memory for the kernel ({:?})",
+                    e.status()
+                );
+                e
+            })?
             .as_ptr() as u64;
 
             (ptr + ADDRESS_ALIGNMENT_MASK) & (!ADDRESS_ALIGNMENT_MASK)
@@ -101,6 +132,11 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
     };
 
     if kernel_base % header.kernel_alignment as u64 != 0 {
+        uefi::println!(
+            "ferriboot: kernel address {:#x} is not aligned to {:#x}",
+            kernel_base,
+            header.kernel_alignment
+        );
         return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
     }
 
@@ -111,33 +147,75 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
     }
     let (initrd_addr, initrd_size) = match entry.initrd.as_deref() {
         Some(initrd) => {
-            let mut initramfs_linux_file = fs::open_file(
-                &CString16::try_from(initrd)
-                    .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?,
-            )?;
-            let initramfs_linux_size = fs::file_size(&mut initramfs_linux_file)?;
+            let initrd_path = CString16::try_from(initrd).map_err(|_| {
+                uefi::println!("ferriboot: invalid initrd path '{}'", initrd);
+                uefi::Error::from(uefi::Status::INVALID_PARAMETER)
+            })?;
+
+            let mut initramfs_linux_file = fs::open_file(&initrd_path).map_err(|e| {
+                uefi::println!(
+                    "ferriboot: cannot open initrd '{}' ({:?})",
+                    initrd,
+                    e.status()
+                );
+                e
+            })?;
+            let initramfs_linux_size = fs::file_size(&mut initramfs_linux_file).map_err(|e| {
+                uefi::println!(
+                    "ferriboot: cannot read initrd '{}' ({:?})",
+                    initrd,
+                    e.status()
+                );
+                e
+            })?;
             let initrd_ptr = boot::allocate_pages(
                 boot::AllocateType::MaxAddress(header.initrd_addr_max as u64),
                 MemoryType::LOADER_DATA,
                 initramfs_linux_size.div_ceil(4096),
-            )?
+            )
+            .map_err(|e| {
+                uefi::println!(
+                    "ferriboot: cannot allocate memory for the initrd ({:?})",
+                    e.status()
+                );
+                e
+            })?
             .as_ptr();
             let initrd_addr = initrd_ptr as u64;
             let initramfs =
                 unsafe { core::slice::from_raw_parts_mut(initrd_ptr, initramfs_linux_size) };
 
             if initrd_addr as usize + initramfs_linux_size - 1 > header.initrd_addr_max as usize {
+                uefi::println!(
+                    "ferriboot: initrd does not fit below {:#x}",
+                    header.initrd_addr_max
+                );
                 return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
             }
 
-            fs::read_file(&mut initramfs_linux_file, initramfs)?;
+            fs::read_file(&mut initramfs_linux_file, initramfs).map_err(|e| {
+                uefi::println!(
+                    "ferriboot: cannot read initrd '{}' ({:?})",
+                    initrd,
+                    e.status()
+                );
+                e
+            })?;
             (initrd_addr, initramfs_linux_size)
         }
         None => (0, 0),
     };
 
     let boot_params_page =
-        boot::allocate_pages(boot::AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)?.as_ptr();
+        boot::allocate_pages(boot::AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
+            .map_err(|e| {
+                uefi::println!(
+                    "ferriboot: cannot allocate memory for boot_params ({:?})",
+                    e.status()
+                );
+                e
+            })?
+            .as_ptr();
 
     unsafe { core::ptr::write_bytes(boot_params_page, 0, 4096) };
     let span = unsafe { core::slice::from_raw_parts_mut(boot_params_page, 4096) };
@@ -156,7 +234,10 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
         cmdline_addr,
         rsdp_addr,
     )
-    .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+    .map_err(|e| {
+        uefi::println!("ferriboot: cannot fill boot_params ({:?})", e);
+        uefi::Error::from(uefi::Status::LOAD_ERROR)
+    })?;
 
     let graphics_info = graphics::graphics_info();
 
@@ -171,9 +252,16 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
                 graphics.stride as u16,
                 graphics.pixel_format == boot_info::PixelFormat::Bgr,
             )
-            .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?;
+            .map_err(|e| {
+                uefi::println!("ferriboot: cannot fill screen_info ({:?})", e);
+                uefi::Error::from(uefi::Status::LOAD_ERROR)
+            })?;
         }
-        Err(_) => {}
+        Err(_) => {
+            uefi::println!(
+                "ferriboot: warning: no usable framebuffer, booting without screen info"
+            );
+        }
     }
 
     Ok(LinuxImage {
@@ -187,14 +275,16 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
 }
 
 pub fn find_rsdp() -> uefi::Result<u64> {
-    let rsdp = uefi::system::with_config_table(|table| {
+    uefi::system::with_config_table(|table| {
         table
             .iter()
             .find(|entry| entry.guid == ConfigTableEntry::ACPI2_GUID)
             .map(|page| page.address as u64)
     })
-    .ok_or(uefi::Error::from(uefi::Status::NOT_FOUND))?;
-    Ok(rsdp)
+    .ok_or_else(|| {
+        uefi::println!("ferriboot: ACPI RSDP not found in config tables");
+        uefi::Error::from(uefi::Status::NOT_FOUND)
+    })
 }
 
 pub unsafe fn boot_linux(kernel_base: u64, boot_params: u64) -> ! {
