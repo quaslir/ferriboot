@@ -1,28 +1,32 @@
 #![no_std]
 
-use core::time;
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
-use alloc::{string::String, vec::Vec};
+use crate::ErrorKind::{MissingColon, NoEntries};
 extern crate alloc;
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
     Linux,
 }
-
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
-    name: String,
-    protocol: Protocol,
-    kernel: String,
-    initrd: Option<String>,
-    cmdline: Option<String>,
+    pub name: String,
+    pub protocol: Protocol,
+    pub kernel: String,
+    pub initrd: Option<String>,
+    pub cmdline: Option<String>,
 }
+#[derive(Debug, Default)]
 struct PartialEntry {
-    name: String,
-    protocol: Option<Protocol>,
-    kernel: Option<String>,
-    initrd: Option<String>,
-    cmdline: Option<String>,
-    start_line: usize,
+    pub name: String,
+    pub protocol: Option<Protocol>,
+    pub kernel: Option<String>,
+    pub initrd: Option<String>,
+    pub cmdline: Option<String>,
+    pub start_line: usize,
 }
 
 impl PartialEntry {
@@ -43,14 +47,25 @@ impl PartialEntry {
             cmdline: self.cmdline,
         })
     }
-}
 
+    pub fn new(name: &str, start_line: usize) -> Self {
+        PartialEntry {
+            name: name.to_string(),
+            protocol: None,
+            kernel: None,
+            initrd: None,
+            cmdline: None,
+            start_line,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
-    timeout: u32,
-    default: usize,
-    entries: Vec<Entry>,
+    pub timeout: u32,
+    pub default: usize,
+    pub entries: Vec<Entry>,
 }
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     MissingColon,
     UnknownKey,
@@ -63,10 +78,10 @@ pub enum ErrorKind {
     NoEntries,
     DefaultOutOfRange,
 }
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConfigError {
-    line: usize,
-    kind: ErrorKind,
+    pub line: usize,
+    pub kind: ErrorKind,
 }
 
 fn split_key_value(line: &str) -> Option<(&str, &str)> {
@@ -118,4 +133,103 @@ fn apply_global(
     }
 
     Ok(())
+}
+
+fn parse_protocol(value: &str) -> Option<Protocol> {
+    match value {
+        "linux" => Some(Protocol::Linux),
+        _ => None,
+    }
+}
+
+fn apply_entry_key(
+    entry: &mut PartialEntry,
+    key: &str,
+    value: &str,
+    line: usize,
+) -> Result<(), ConfigError> {
+    match key {
+        "protocol" => {
+            let protocol = parse_protocol(value).ok_or(ConfigError {
+                line: line,
+                kind: ErrorKind::UnknownProtocol,
+            })?;
+            entry.protocol = Some(protocol);
+        }
+
+        "kernel" => entry.kernel = Some(String::from(value)),
+        "initrd" => entry.initrd = Some(String::from(value)),
+        "cmdline" => entry.cmdline = Some(String::from(value)),
+        "timeout" | "default" => {
+            return Err(ConfigError {
+                line: line,
+                kind: ErrorKind::GlobalKeyInsideEntry,
+            });
+        }
+
+        _ => {
+            return Err(ConfigError {
+                line: line,
+                kind: ErrorKind::UnknownKey,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+pub fn parse(text: &str) -> Result<Config, ConfigError> {
+    let mut timeout = 3;
+    let mut default = 0;
+    let mut entries = Vec::new();
+    let mut current: Option<PartialEntry> = None;
+
+    for (index, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with("#") {
+            continue;
+        }
+        if let Some(name) = line.strip_prefix('/') {
+            if let Some(prev) = current.take() {
+                entries.push(prev.finish()?);
+            }
+
+            current = Some(PartialEntry::new(name.trim(), index + 1));
+            continue;
+        }
+
+        let (key, value) = split_key_value(line).ok_or(ConfigError {
+            line: index + 1,
+            kind: ErrorKind::MissingColon,
+        })?;
+
+        match current.as_mut() {
+            Some(entry) => apply_entry_key(entry, key, value, index + 1)?,
+            None => apply_global(key, value, index + 1, &mut timeout, &mut default)?,
+        }
+    }
+
+    if let Some(prev) = current.take() {
+        entries.push(prev.finish()?);
+    }
+
+    if entries.is_empty() {
+        return Err(ConfigError {
+            line: 0,
+            kind: ErrorKind::NoEntries,
+        });
+    }
+
+    if default >= entries.len() {
+        return Err(ConfigError {
+            line: 0,
+            kind: ErrorKind::DefaultOutOfRange,
+        });
+    }
+
+    Ok(Config {
+        timeout,
+        default,
+        entries,
+    })
 }
