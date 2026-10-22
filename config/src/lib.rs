@@ -83,6 +83,25 @@ pub enum ErrorKind {
     NoEntries,
     DefaultOutOfRange,
 }
+
+impl ErrorKind {
+    pub fn message(&self) -> &'static str {
+        match self {
+            ErrorKind::MissingColon => "expected 'key: value'",
+            ErrorKind::UnknownKey => "unknown key",
+            ErrorKind::KeyOutsideEntry => "key must be inside an entry (add '/Name' above it)",
+            ErrorKind::GlobalKeyInsideEntry => {
+                "'timeout' and 'default' must be before the first entry"
+            }
+            ErrorKind::InvalidNumber => "value is not a number",
+            ErrorKind::UnknownProtocol => "unknown protocol (expected 'linux')",
+            ErrorKind::MissingKernel => "entry has no 'kernel'",
+            ErrorKind::MissingProtocol => "entry has no 'protocol'",
+            ErrorKind::NoEntries => "no boot entries defined",
+            ErrorKind::DefaultOutOfRange => "'default' points to an entry that does not exist",
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConfigError {
     pub line: usize,

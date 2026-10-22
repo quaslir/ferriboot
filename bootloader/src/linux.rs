@@ -1,14 +1,8 @@
-use core::slice::from_raw_parts;
-
 use crate::fs;
 use crate::graphics;
 use uefi::CString16;
-use uefi::proto::device_path::media::Protocol;
+use uefi::boot::{self, MemoryType};
 use uefi::table::cfg::ConfigTableEntry;
-use uefi::{
-    boot::{self, MemoryType},
-    cstr16,
-};
 pub struct LinuxImage {
     pub kernel_base: u64,
     pub initrd_addr: u64,
@@ -20,6 +14,11 @@ pub struct LinuxImage {
 
 fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
     if cmd.len() > max_len {
+        uefi::println!(
+            "ferriboot: cmdline too long ({} bytes, max {})",
+            cmd.len(),
+            max_len
+        );
         return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
     }
 
@@ -27,7 +26,14 @@ fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
         boot::AllocateType::MaxAddress(0xFFFF_FFFF),
         MemoryType::LOADER_DATA,
         1,
-    )?
+    )
+    .map_err(|e| {
+        uefi::println!(
+            "ferriboot: cannot allocate memory for cmdline ({:?})",
+            e.status()
+        );
+        e
+    })?
     .as_ptr();
 
     unsafe {
@@ -41,12 +47,26 @@ fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
 const ADDRESS_ALIGNMENT_MASK: u64 = 0x1FFFFF;
 pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
     if entry.protocol != config::Protocol::Linux {
-        return Err(uefi::Error::from(uefi::Status::LOAD_ERROR));
+        uefi::println!(
+            "ferriboot: entry '{}' uses an unsupported protocol",
+            entry.name
+        );
+        return Err(uefi::Error::from(uefi::Status::UNSUPPORTED));
     }
-    let mut vmlinuz_linux_file = fs::open_file(
-        &CString16::try_from(entry.kernel.as_str())
-            .map_err(|_| uefi::Error::from(uefi::Status::LOAD_ERROR))?,
-    )?;
+
+    let kernel_path = CString16::try_from(entry.kernel.as_str()).map_err(|e| {
+        uefi::println!("ferriboot: invalid kernel path '{}'", entry.kernel);
+        uefi::Error::from(uefi::Status::LOAD_ERROR)
+    })?;
+
+    let mut vmlinuz_linux_file = fs::open_file(&kernel_path).map_err(|e| {
+        uefi::println!(
+            "ferriboot: cannot open kernel '{}' ({:?})",
+            entry.kernel,
+            e.status()
+        );
+        e
+    })?;
     let vmlinuz_linux_size = fs::file_size(&mut vmlinuz_linux_file)?;
 
     let mut vmlinuz_linux = alloc::vec![0u8; vmlinuz_linux_size];
