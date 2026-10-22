@@ -2,12 +2,13 @@
 
 use core::u8;
 pub mod e820;
+pub mod efi_info;
 pub mod screen_info;
 pub mod setup;
 mod utils;
 use {
-    setup::*, utils::read_u16, utils::read_u32, utils::read_u64, utils::write_u16,
-    utils::write_u32, utils::write_u64,
+    utils::read_u16, utils::read_u32, utils::read_u64, utils::write_u16, utils::write_u32,
+    utils::write_u64,
 };
 
 #[derive(Debug, PartialEq)]
