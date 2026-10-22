@@ -2,11 +2,9 @@
 set -e
 
 cargo build -p bootloader --target x86_64-unknown-uefi
-cargo build -p kernel --target x86_64-unknown-none
 
 mkdir -p esp/EFI/BOOT
 cp target/x86_64-unknown-uefi/debug/bootloader.efi esp/EFI/BOOT/BOOTX64.EFI
-cp target/x86_64-unknown-none/debug/kernel esp/kernel.elf
 
 qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="/usr/share/edk2/x64/OVMF_CODE.4m.fd" \

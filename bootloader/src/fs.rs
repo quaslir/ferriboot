@@ -1,7 +1,5 @@
 use core::u8;
 
-use alloc::vec;
-use alloc::vec::Vec;
 use uefi::Error;
 use uefi::boot;
 use uefi::data_types::CStr16;
