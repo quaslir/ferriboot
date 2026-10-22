@@ -64,6 +64,12 @@ pub struct Config {
     pub default: usize,
     pub entries: Vec<Entry>,
 }
+
+impl Config {
+    pub fn default_entry(&self) -> &Entry {
+        return &self.entries[self.default];
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     MissingColon,
