@@ -21,7 +21,7 @@ pub fn load_config() -> uefi::Result<config::Config> {
         uefi::println!("ferriboot: cannot read ferriboot.conf ({:?})", e.status());
         e
     })?;
-    let converted = core::str::from_utf8(&buffer).map_err(|e| {
+    let converted = core::str::from_utf8(&buffer).map_err(|_| {
         uefi::println!("ferriboot: ferriboot.conf is not valid UTF-8");
         uefi::Error::from(uefi::Status::LOAD_ERROR)
     })?;

@@ -27,7 +27,7 @@ fn main() -> Status {
         let mut entries = [bzimage::e820::E820Entry::default(); bzimage::e820::E820_MAX_ENTRIES];
         let size = memory::build_e820(&mut map, &mut entries).unwrap();
         let raw = core::slice::from_raw_parts_mut(image.boot_params_addr as *mut u8, 4096);
-        bzimage::e820::fill_e820(raw, &entries).unwrap();
+        bzimage::e820::fill_e820(raw, &entries[..size]).unwrap();
         let meta = map.meta();
         let map_buffer = map.buffer().as_ptr() as u64;
         bzimage::efi_info::fill_efi_info(
