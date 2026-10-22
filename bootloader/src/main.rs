@@ -8,10 +8,12 @@ use uefi::{
     prelude::*,
     proto::console::gop::PixelFormat,
 };
+mod conf;
 mod fs;
 mod linux;
 mod loader;
 mod memory;
+use config;
 extern crate alloc;
 #[entry]
 fn main() -> Status {
