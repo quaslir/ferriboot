@@ -1,8 +1,11 @@
+use core::fmt::Write;
 use core::time::Duration;
 
 use uefi::boot;
 use uefi::proto::console::text::{Key, ScanCode};
 use uefi::system::{with_stdin, with_stdout};
+
+use crate::banner;
 pub fn select_entry(config: &config::Config) -> usize {
     if config.timeout == 0 {
         return config.default;
@@ -62,4 +65,13 @@ pub fn select_entry(config: &config::Config) -> usize {
             }
         }
     }
+}
+
+fn draw(config: &config::Config, selected: usize, seconds_left: Option<u32>) {
+    with_stdout(|out| {
+        out.clear().ok();
+        banner::print_banner();
+        out.write_str("\n").ok();
+        for (i, entry) in config.entries.iter().enumerate() {}
+    });
 }
