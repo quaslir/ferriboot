@@ -1,29 +1,7 @@
-use bzimage::e820;
 use bzimage::e820::E820Entry;
-use uefi::Error;
 
 use uefi::mem::memory_map::{MemoryMapMut, MemoryMapOwned};
-use uefi::{
-    boot::{self, MemoryType},
-    mem::memory_map::MemoryMap,
-};
-
-pub fn print_memory_info() -> Result<(), Error> {
-    let map = boot::memory_map(MemoryType::LOADER_DATA)?;
-    let mut i: u64 = 0;
-    let mut bytes_count: u64 = 0;
-    for desc in map.entries() {
-        if desc.ty == MemoryType::CONVENTIONAL {
-            bytes_count += desc.page_count * 4096;
-        }
-        i += 1;
-    }
-
-    uefi::println!("Iterations: {}", i);
-    uefi::println!("Bytes: {}", bytes_count);
-    Ok(())
-}
-
+use uefi::{boot::MemoryType, mem::memory_map::MemoryMap};
 pub fn to_e820_type(typ: MemoryType) -> u32 {
     match typ {
         MemoryType::CONVENTIONAL

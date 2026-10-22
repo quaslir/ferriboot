@@ -9,7 +9,7 @@ const BANNER: [&str; 5] = [
     r"|_|   \___||_|   |_|   |_||_.__/  \___/  \___/  \__|",
 ];
 
-fn set_color(fg: Color) {
+pub fn set_color(fg: Color) {
     with_stdout(|out| {
         let _ = out.set_color(fg, Color::Black);
     });

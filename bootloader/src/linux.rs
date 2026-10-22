@@ -54,7 +54,7 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
         return Err(uefi::Error::from(uefi::Status::UNSUPPORTED));
     }
 
-    let kernel_path = CString16::try_from(entry.kernel.as_str()).map_err(|e| {
+    let kernel_path = CString16::try_from(entry.kernel.as_str()).map_err(|_| {
         uefi::println!("ferriboot: invalid kernel path '{}'", entry.kernel);
         uefi::Error::from(uefi::Status::LOAD_ERROR)
     })?;
@@ -250,7 +250,7 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
                 graphics.width as u16,
                 graphics.height as u16,
                 graphics.stride as u16,
-                graphics.pixel_format == boot_info::PixelFormat::Bgr,
+                graphics.pixel_format == graphics::PixelFormat::Bgr,
             )
             .map_err(|e| {
                 uefi::println!("ferriboot: cannot fill screen_info ({:?})", e);

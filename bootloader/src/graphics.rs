@@ -1,7 +1,22 @@
-use boot_info::Framebuffer;
 use uefi::boot::{self, open_protocol_exclusive};
-use uefi::proto::console::gop::{self, PixelFormat};
-pub fn graphics_info() -> uefi::Result<boot_info::Framebuffer> {
+use uefi::proto::console::gop::{self};
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PixelFormat {
+    Rgb = 0,
+    Bgr = 1,
+}
+
+#[repr(C)]
+pub struct Framebuffer {
+    pub base: u64,
+    pub size: usize,
+    pub width: usize,
+    pub height: usize,
+    pub stride: usize,
+    pub pixel_format: PixelFormat,
+}
+pub fn graphics_info() -> uefi::Result<Framebuffer> {
     let handle = boot::get_handle_for_protocol::<gop::GraphicsOutput>()?;
     let mut protocol = open_protocol_exclusive::<gop::GraphicsOutput>(handle)?;
     let info = protocol.current_mode_info();
@@ -11,8 +26,8 @@ pub fn graphics_info() -> uefi::Result<boot_info::Framebuffer> {
     let format = info.pixel_format();
 
     let pixel_format = match format {
-        PixelFormat::Rgb => boot_info::PixelFormat::Rgb,
-        PixelFormat::Bgr => boot_info::PixelFormat::Bgr,
+        gop::PixelFormat::Rgb => PixelFormat::Rgb,
+        gop::PixelFormat::Bgr => PixelFormat::Bgr,
         _ => return Err(uefi::Error::from(uefi::Status::UNSUPPORTED)),
     };
 
