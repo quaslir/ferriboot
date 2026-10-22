@@ -6,10 +6,7 @@ pub mod efi_info;
 pub mod screen_info;
 pub mod setup;
 mod utils;
-use {
-    utils::read_u16, utils::read_u32, utils::read_u64, utils::write_u16, utils::write_u32,
-    utils::write_u64,
-};
+use {e820::*, setup::*, utils::*};
 
 #[derive(Debug, PartialEq)]
 pub enum ParseError {

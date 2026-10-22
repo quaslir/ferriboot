@@ -2,19 +2,17 @@
 #![no_std]
 mod banner;
 mod graphics;
-use core::time::Duration;
+
 use uefi::{
-    boot::{AllocateType, MemoryType, exit_boot_services},
+    boot::{MemoryType, exit_boot_services},
     mem::memory_map::MemoryMap,
     prelude::*,
-    proto::console::gop::PixelFormat,
 };
 mod conf;
 mod fs;
 mod linux;
 mod loader;
 mod memory;
-use config;
 extern crate alloc;
 #[entry]
 fn main() -> Status {
