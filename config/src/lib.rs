@@ -10,6 +10,15 @@ extern crate alloc;
 pub enum Protocol {
     Linux,
 }
+
+impl Protocol {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Protocol::Linux => "linux",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub name: String,
@@ -70,6 +79,30 @@ impl Config {
         return &self.entries[self.default];
     }
 }
+
+impl core::fmt::Display for Config {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        writeln!(f, "timeout: {}", self.timeout)?;
+        writeln!(f, "default: {}", self.default + 1)?;
+        writeln!(f, "")?;
+
+        for entry in &self.entries {
+            writeln!(f, "/{}", entry.name)?;
+            writeln!(f, "protocol: {}", entry.protocol.as_str())?;
+            writeln!(f, "kernel: {}", entry.kernel)?;
+            if let Some(initrd) = &entry.initrd {
+                writeln!(f, "initrd: {}", initrd)?;
+            }
+            if let Some(cmdline) = &entry.cmdline {
+                writeln!(f, "cmdline: {}", cmdline)?;
+            }
+
+            writeln!(f, "")?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     MissingColon,
@@ -261,6 +294,8 @@ pub fn parse(text: &str) -> Result<Config, ConfigError> {
 #[cfg(test)]
 
 mod tests {
+    use core::ptr::eq;
+
     use alloc::format;
 
     use crate::*;
@@ -462,5 +497,19 @@ mod tests {
                 kind: ErrorKind::DefaultOutOfRange
             })
         );
+    }
+
+    //---------------------------------------------------------
+
+    #[test]
+
+    pub fn config_to_string() {
+        let result = parse(FULL);
+        assert!(!result.is_err());
+        let config = result.unwrap();
+        let string = config.to_string();
+        let config2 = parse(&string);
+        assert!(!config2.is_err());
+        assert_eq!(config2.unwrap(), config);
     }
 }
