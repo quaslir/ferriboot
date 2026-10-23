@@ -16,8 +16,12 @@ pub fn select_entry(config: &config::Config) -> usize {
     let mut selected = config.default;
 
     with_stdin(|f| f.reset(false)).ok();
-    with_stdout(|out| out.enable_cursor(false)).ok();
-    banner::print_banner();
+    let cols = with_stdout(|out| out.current_mode())
+        .ok()
+        .flatten()
+        .map(|m| m.columns())
+        .unwrap_or(80);
+    banner::print_banner(cols);
     let cursor_position = with_stdout(|out| out.cursor_position());
 
     loop {
@@ -26,7 +30,7 @@ pub fn select_entry(config: &config::Config) -> usize {
                 true => Some(ticks_left.div_ceil(10)),
                 false => None,
             };
-            draw(config, selected, seconds_left, cursor_position.1);
+            draw(config, selected, seconds_left, cursor_position.1, cols);
             redraw = false;
         }
 
@@ -74,26 +78,47 @@ pub fn select_entry(config: &config::Config) -> usize {
     }
 }
 
-fn draw(config: &config::Config, selected: usize, seconds_left: Option<u32>, cursor_row: usize) {
+fn draw(
+    config: &config::Config,
+    selected: usize,
+    seconds_left: Option<u32>,
+    cursor_row: usize,
+    columns: usize,
+) {
+    with_stdout(|out| out.enable_cursor(false)).ok();
     with_stdout(|out| {
+        let name_w = config
+            .entries
+            .iter()
+            .map(|e| e.name.len())
+            .max()
+            .unwrap_or(0)
+            + 2;
+        let menu_w = name_w + 3;
+        let left_x = (columns.saturating_sub(menu_w)) / 2;
         for (i, entry) in config.entries.iter().enumerate() {
-            out.set_cursor_position(0, cursor_row + i).ok();
+            out.set_cursor_position(left_x, cursor_row + i).ok();
             if i == selected {
                 out.set_color(Color::Black, Color::LightGray).ok();
-                write!(out, " > {}", entry.name).ok();
+                write!(out, " > {:<name_w$}", entry.name).ok();
             } else {
                 out.set_color(Color::LightGray, Color::Black).ok();
-                write!(out, "   {}", entry.name).ok();
+                write!(out, "   {:<name_w$}", entry.name).ok();
             }
 
             out.set_color(Color::LightGray, Color::Black).ok();
         }
-        out.set_cursor_position(0, cursor_row + config.entries.len() + 1)
+
+        let hint_x = (columns.saturating_sub(50)) / 2;
+
+        out.set_cursor_position(hint_x, cursor_row + config.entries.len() + 1)
             .ok();
+
         if let Some(n) = seconds_left {
-            write!(out, "Booting in {} s. Up/Down select, Enter boot", n).ok();
+            let text = alloc::format!("Booting in {} s. Up/Down select, Enter boot", n);
+            write!(out, "{:^50}", text).ok();
         } else {
-            write!(out, "{:<50}", "Up/Down select, Enter boot").ok();
+            write!(out, "{:^50}", "Up/Down select, Enter boot").ok();
         }
     });
 }

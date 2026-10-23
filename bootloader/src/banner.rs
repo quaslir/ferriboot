@@ -15,21 +15,23 @@ pub fn set_color(fg: Color) {
     });
 }
 
-pub fn print_banner() {
+pub fn print_banner(cols: usize) {
+    let pad = cols.saturating_sub(52) / 2;
+
     with_stdout(|out| {
         let _ = out.clear();
     });
 
     set_color(Color::LightCyan);
     for line in BANNER {
-        uefi::println!("{}", line);
+        uefi::println!("{:pad$}{}", "", line);
     }
 
     set_color(Color::DarkGray);
-    uefi::println!("{:>52}", concat!("v", env!("CARGO_PKG_VERSION")));
+    uefi::println!("{:pad$}{:>52}", "", concat!("v", env!("CARGO_PKG_VERSION")));
 
     set_color(Color::White);
-    uefi::println!("  a Linux bootloader written in Rust");
+    uefi::println!("{:pad$}{:^52}", "", "  a Linux bootloader written in Rust");
     uefi::println!();
 
     set_color(Color::LightGray);
