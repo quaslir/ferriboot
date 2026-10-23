@@ -13,6 +13,19 @@ fn find_mnt(field: &str) -> Result<String, String> {
     Ok(value.trim().to_string())
 }
 
+fn from_proc_cmdline() -> Option<String> {
+    let value = std::fs::read_to_string("/proc/cmdline").ok()?;
+    let splitted = value
+        .split_whitespace()
+        .filter(|e| !e.starts_with("BOOT_IMAGE=") && !e.starts_with("initrd="))
+        .collect::<Vec<&str>>()
+        .join(" ");
+    if !splitted.contains("root=") {
+        return None;
+    }
+    Some(splitted)
+}
+
 pub fn get_cmdline() -> Result<String, String> {
     let path = PathBuf::from("/etc/kernel/cmdline");
 
@@ -21,6 +34,10 @@ pub fn get_cmdline() -> Result<String, String> {
             .map_err(|e| e.to_string())?
             .trim()
             .to_string());
+    }
+
+    if let Some(c) = from_proc_cmdline() {
+        return Ok(c);
     }
 
     let uuid = find_mnt("UUID")?;
