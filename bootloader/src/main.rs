@@ -51,6 +51,9 @@ fn main() -> Status {
     };
 
     let index = menu::select_entry(&conf);
+    system::with_stdout(|out| out.set_color(Color::LightGray, Color::Black)).ok();
+    system::with_stdout(|out| out.clear()).ok();
+    uefi::println!("Loading {}", conf.entries[index].name);
     let load_linux = linux::load_linux(&conf.entries[index]);
 
     let image = match load_linux {

@@ -1,5 +1,8 @@
 use std::fs::{self, create_dir_all};
-
+use std::io::stderr;
+use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
+mod bootentry;
 mod cmdline;
 mod esp;
 mod install;
@@ -10,20 +13,7 @@ fn die(msg: &str) -> ! {
     std::process::exit(1);
 }
 
-fn main() {
-    let it = std::env::args();
-    let args = it.collect::<Vec<String>>();
-
-    let first = args.get(1).map(|s| s.as_str());
-    match first {
-        Some("mkconfig") => {}
-        _ => {
-            eprintln!("usage: ferriboot mkconfig [--dry-run]");
-            std::process::exit(1);
-        }
-    };
-
-    let dry_run = args.iter().any(|e| e == "--dry-run");
+fn cmd_mkconfig(dry_run: bool) {
     let Some(esp) = esp::find_esp() else {
         die("ESP not found (checked /boot, /efi, /boot/efi)");
     };
@@ -143,4 +133,83 @@ fn main() {
             eprintln!("ferriboot: removed {}", path.display());
         }
     }
+}
+
+fn cmd_install(args: &[String], dry_run: bool) {
+    if !dry_run {
+        let Ok(meta) = fs::metadata("/proc/self") else {
+            die("cannot check user id (/proc/self)");
+        };
+
+        let uid = meta.uid();
+        if uid != 0 {
+            die("install must be run as root (try: sudo ferriboot install)")
+        }
+    }
+    let efi = args.iter().position(|s| s == "--efi");
+
+    let path_str = match efi {
+        Some(i) => {
+            let Some(p) = args.get(i + 1) else {
+                die("--efi needs a path")
+            };
+            p.as_str()
+        }
+        None => "/usr/lib/ferriboot/ferriboot.efi",
+    };
+    let path = PathBuf::from(path_str);
+    if !path.is_file() {
+        die(format!("{} not found", path.display()).as_str());
+    }
+
+    let Some(esp) = esp::find_esp() else {
+        die("ESP not found (checked /boot, /efi, /boot/efi)");
+    };
+    eprintln!("{:?}", bootentry::esp_partition(&esp));
+    let dest = esp.join("EFI/ferriboot/ferriboot.ef");
+
+    if dry_run {
+        eprintln!(
+            "ferriboot: would copy {} -> {}",
+            path.display(),
+            dest.display()
+        );
+    } else {
+        let Some(dir) = dest.parent() else {
+            die("cannot determine directory of destination path")
+        };
+        if let Err(e) = create_dir_all(dir) {
+            die(&format!("cannot create {}: {}", dir.display(), e));
+        };
+        if let Err(e) = fs::copy(&path, &dest) {
+            die(&format!(
+                "cannot copy {} -> {}: {}",
+                path.display(),
+                dest.display(),
+                e
+            ));
+        }
+
+        eprintln!("ferriboot: installed {}", dest.display());
+    }
+}
+
+fn main() {
+    let it = std::env::args();
+    let args = it.collect::<Vec<String>>();
+
+    let first = args.get(1).map(|s| s.as_str());
+    let dry_run = args.iter().any(|e| e == "--dry-run");
+    match first {
+        Some("mkconfig") => {
+            cmd_mkconfig(dry_run);
+        }
+        Some("install") => {
+            cmd_install(&args, dry_run);
+        }
+        _ => {
+            eprintln!("usage: ferriboot <mkconfig|install>");
+            std::process::exit(1);
+        }
+    };
 }
