@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 config = { version = "0.1.0", path = "../config" }
+[[bin]]
+name = "ferriboot"
+path = "src/main.rs"

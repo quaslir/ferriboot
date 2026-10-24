@@ -189,6 +189,8 @@ fn cmd_install(args: &[String], dry_run: bool) {
         }
         eprintln!("ferriboot: installed {}", dest.display());
     }
+
+    cmd_mkconfig(dry_run);
     let find_entry_result = bootentry::find_entry("\\EFI\\ferriboot\\ferriboot.efi");
 
     let label = match find_entry_result {
@@ -198,31 +200,79 @@ fn cmd_install(args: &[String], dry_run: bool) {
 
     if let Some(entry) = label {
         eprintln!("boot entry {} already exists", entry);
-        return;
+    } else {
+        let esp_partition_result = bootentry::esp_partition(&esp);
+
+        let partition = match esp_partition_result {
+            Ok(p) => p,
+            Err(e) => die(&e),
+        };
+
+        if dry_run {
+            eprintln!(
+                "ferriboot: would create boot entry ferriboot ({}, partition {})",
+                partition.0, partition.1
+            );
+        } else {
+            if let Err(e) = bootentry::create_entry(
+                &partition.0,
+                partition.1,
+                "\\EFI\\ferriboot\\ferriboot.efi",
+                "ferriboot",
+            ) {
+                die(&e);
+            };
+        }
     }
 
-    let esp_partition_result = bootentry::esp_partition(&esp);
-
-    let partition = match esp_partition_result {
+    let exe = match std::env::current_exe() {
         Ok(p) => p,
-        Err(e) => die(&e),
+        Err(e) => die(format!("cannot find own binary {}", e).as_str()),
     };
-
-    if dry_run {
+    let target = PathBuf::from("/usr/local/bin/ferriboot");
+    let same = target.exists() && fs::canonicalize(&exe).ok() == fs::canonicalize(&target).ok();
+    if same {
+        eprintln!("ferriboot: /usr/local/bin/ferriboot is already the running binary");
+    } else if dry_run {
         eprintln!(
-            "ferriboot: would create boot entry ferriboot ({}, partition {})",
-            partition.0, partition.1
+            "ferriboot: would install {} -> {}",
+            exe.display(),
+            target.display()
         );
     } else {
-        if let Err(e) = bootentry::create_entry(
-            &partition.0,
-            partition.1,
-            "\\EFI\\ferriboot\\ferriboot.efi",
-            "ferriboot",
-        ) {
-            die(&e);
+        if let Err(e) = fs::copy(&exe, &target) {
+            die(format!(
+                "cannot copy {} -> {}: {}",
+                exe.display(),
+                target.display(),
+                e
+            )
+            .as_str());
         };
+
+        eprintln!("ferriboot: installed {}", target.display());
     }
+}
+
+fn cmd_help() {
+    eprintln!(
+        "usage: ferriboot <command> [options]
+
+    commands:
+      install     install the bootloader to the ESP, register it in the
+                  firmware, generate the config and copy ferriboot to
+                  /usr/local/bin
+      mkconfig    find kernels, copy them to the ESP if needed and write
+                  EFI/ferriboot/ferriboot.conf
+      help        show this help
+
+    options:
+      --dry-run   show what would be done without changing anything
+      --efi PATH  (install) bootloader image to install
+                  [default: /usr/lib/ferriboot/ferriboot.efi]
+
+    most commands need root: sudo ferriboot <command>"
+    );
 }
 
 fn main() {
@@ -237,6 +287,9 @@ fn main() {
         }
         Some("install") => {
             cmd_install(&args, dry_run);
+        }
+        Some("help") => {
+            cmd_help();
         }
         _ => {
             eprintln!("usage: ferriboot <mkconfig|install>");
