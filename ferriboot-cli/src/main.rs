@@ -1,5 +1,4 @@
 use std::fs::{self, create_dir_all};
-use std::io::stderr;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 mod bootentry;
@@ -165,8 +164,7 @@ fn cmd_install(args: &[String], dry_run: bool) {
     let Some(esp) = esp::find_esp() else {
         die("ESP not found (checked /boot, /efi, /boot/efi)");
     };
-    eprintln!("{:?}", bootentry::esp_partition(&esp));
-    let dest = esp.join("EFI/ferriboot/ferriboot.ef");
+    let dest = esp.join("EFI/ferriboot/ferriboot.efi");
 
     if dry_run {
         eprintln!(
@@ -189,8 +187,41 @@ fn cmd_install(args: &[String], dry_run: bool) {
                 e
             ));
         }
-
         eprintln!("ferriboot: installed {}", dest.display());
+    }
+    let find_entry_result = bootentry::find_entry("\\EFI\\ferriboot\\ferriboot.efi");
+
+    let label = match find_entry_result {
+        Ok(l) => l,
+        Err(e) => die(&e),
+    };
+
+    if let Some(entry) = label {
+        eprintln!("boot entry {} already exists", entry);
+        return;
+    }
+
+    let esp_partition_result = bootentry::esp_partition(&esp);
+
+    let partition = match esp_partition_result {
+        Ok(p) => p,
+        Err(e) => die(&e),
+    };
+
+    if dry_run {
+        eprintln!(
+            "ferriboot: would create boot entry ferriboot ({}, partition {})",
+            partition.0, partition.1
+        );
+    } else {
+        if let Err(e) = bootentry::create_entry(
+            &partition.0,
+            partition.1,
+            "\\EFI\\ferriboot\\ferriboot.efi",
+            "ferriboot",
+        ) {
+            die(&e);
+        };
     }
 }
 

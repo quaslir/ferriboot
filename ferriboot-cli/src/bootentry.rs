@@ -1,4 +1,8 @@
-use std::{fs, ops::RangeBounds, path::Path};
+use std::{
+    fs,
+    ops::RangeBounds,
+    path::{Path, PathBuf},
+};
 
 pub fn run(program: &str, args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new(program).args(args).output();
@@ -35,4 +39,63 @@ pub fn esp_partition(esp: &Path) -> Result<(String, u32), String> {
         .map_err(|e| e.to_string())?;
 
     Ok((disk, part))
+}
+
+pub fn find_entry(label: &str) -> Result<Option<String>, String> {
+    let dir = PathBuf::from("/sys/firmware/efi");
+    if !dir.exists() {
+        return Err("not booted in UEFI mode (/sys/firmware/efi missing)".to_string());
+    }
+
+    let efibootmgr = run("efibootmgr", &["-v"])?;
+    for line in efibootmgr.lines() {
+        let Some(entry) = line.strip_prefix("Boot") else {
+            continue;
+        };
+        let mut found = true;
+        let Some(number) = entry.get(..4) else {
+            continue;
+        };
+        let Some(rest) = entry.get(4..) else {
+            continue;
+        };
+        for c in number.chars() {
+            if !c.is_ascii_hexdigit() {
+                found = false;
+                break;
+            }
+        }
+
+        if found {
+            let normalized = rest.trim_start_matches('*').trim_start();
+            if normalized
+                .to_ascii_lowercase()
+                .contains(label.to_ascii_lowercase().as_str())
+            {
+                return Ok(Some(number.to_string()));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+pub fn create_entry(disk: &str, part: u32, loader: &str, label: &str) -> Result<(), String> {
+    let part_str = part.to_string();
+
+    run(
+        "efibootmgr",
+        &[
+            "--create",
+            "--disk",
+            disk,
+            "--part",
+            part_str.as_str(),
+            "--loader",
+            loader,
+            "--label",
+            label,
+        ],
+    )?;
+    Ok(())
 }
