@@ -3,7 +3,7 @@ use std::{
     ops::RangeBounds,
     path::{Path, PathBuf},
 };
-
+pub const LOADER_PATH: &str = "\\EFI\\ferriboot\\ferriboot.efi";
 pub fn run(program: &str, args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new(program).args(args).output();
 
@@ -97,5 +97,10 @@ pub fn create_entry(disk: &str, part: u32, loader: &str, label: &str) -> Result<
             label,
         ],
     )?;
+    Ok(())
+}
+
+pub fn delete_entry(num: &str) -> Result<(), String> {
+    run("efibootmgr", &["-b", num, "-B"])?;
     Ok(())
 }

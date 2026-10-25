@@ -1,4 +1,5 @@
 use std::{
+    arch::x86_64::_mm_mask_blend_epi32,
     fs,
     path::{Path, PathBuf},
 };
@@ -89,4 +90,20 @@ pub fn plan_cleanup(esp: &Path, kernels: &[Kernel]) -> Vec<PathBuf> {
     }
 
     stale
+}
+
+pub fn is_up_to_date(from: &Path, to: &Path) -> bool {
+    let (Ok(a), Ok(b)) = (fs::metadata(from), fs::metadata(to)) else {
+        return false;
+    };
+
+    if a.len() != b.len() {
+        return false;
+    }
+
+    let (Ok(ma), Ok(mb)) = (a.modified(), b.modified()) else {
+        return false;
+    };
+
+    mb >= ma
 }

@@ -1,6 +1,8 @@
 use std::fs::{self, create_dir_all};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+
+use crate::bootentry::LOADER_PATH;
 mod bootentry;
 mod cmdline;
 mod esp;
@@ -12,7 +14,16 @@ fn die(msg: &str) -> ! {
     eprintln!("ferriboot: {}", msg);
     std::process::exit(1);
 }
+fn require_root() {
+    let Ok(meta) = fs::metadata("/proc/self") else {
+        die("cannot check user id (/proc/self)");
+    };
 
+    let uid = meta.uid();
+    if uid != 0 {
+        die("install must be run as root (try: sudo ferriboot install)")
+    }
+}
 fn cmd_mkconfig(dry_run: bool) {
     let Some(esp) = esp::find_esp() else {
         die("ESP not found (checked /boot, /efi, /boot/efi)");
@@ -36,6 +47,7 @@ fn cmd_mkconfig(dry_run: bool) {
         planned.push(k);
         copies.extend(c);
     }
+    copies.retain(|(from, to)| !install::is_up_to_date(from, to));
     let stale = install::plan_cleanup(&esp, &kernels);
     let get_cmdline = cmdline::get_cmdline();
     let cmdline = match get_cmdline {
@@ -137,14 +149,7 @@ fn cmd_mkconfig(dry_run: bool) {
 
 fn cmd_install(args: &[String], dry_run: bool) {
     if !dry_run {
-        let Ok(meta) = fs::metadata("/proc/self") else {
-            die("cannot check user id (/proc/self)");
-        };
-
-        let uid = meta.uid();
-        if uid != 0 {
-            die("install must be run as root (try: sudo ferriboot install)")
-        }
+        require_root();
     }
     let efi = args.iter().position(|s| s == "--efi");
 
@@ -192,7 +197,7 @@ fn cmd_install(args: &[String], dry_run: bool) {
     }
 
     cmd_mkconfig(dry_run);
-    let find_entry_result = bootentry::find_entry("\\EFI\\ferriboot\\ferriboot.efi");
+    let find_entry_result = bootentry::find_entry(LOADER_PATH);
 
     let label = match find_entry_result {
         Ok(l) => l,
@@ -215,12 +220,9 @@ fn cmd_install(args: &[String], dry_run: bool) {
                 partition.0, partition.1
             );
         } else {
-            if let Err(e) = bootentry::create_entry(
-                &partition.0,
-                partition.1,
-                "\\EFI\\ferriboot\\ferriboot.efi",
-                "ferriboot",
-            ) {
+            if let Err(e) =
+                bootentry::create_entry(&partition.0, partition.1, LOADER_PATH, "ferriboot")
+            {
                 die(&e);
             };
         }
@@ -280,6 +282,31 @@ fn cmd_help() {
     );
 }
 
+fn cmd_uninstall(dry_run: bool) {
+    if !dry_run {
+        require_root();
+    }
+    let find_entry = bootentry::find_entry(LOADER_PATH);
+    let entry = match find_entry {
+        Ok(entr) => entr,
+        Err(e) => die(&e),
+    };
+
+    if let Some(entr) = entry {
+        if dry_run {
+            eprintln!("ferriboot: would remove boot entry {}", entr);
+        } else {
+            if let Err(e) = bootentry::delete_entry(&entr) {
+                die(&e)
+            };
+
+            eprintln!("ferriboot: removed boot entry {}", entr);
+        }
+    } else {
+        eprintln!("ferriboot: no boot entry found");
+    }
+}
+
 fn main() {
     let it = std::env::args();
     let args = it.collect::<Vec<String>>();
@@ -292,6 +319,9 @@ fn main() {
         }
         Some("install") => {
             cmd_install(&args, dry_run);
+        }
+        Some("uninstall") => {
+            cmd_uninstall(dry_run);
         }
         Some("help") => {
             cmd_help();
