@@ -1,8 +1,9 @@
 use std::fs::{self, create_dir_all};
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::bootentry::LOADER_PATH;
+use crate::esp::find_esp;
 mod bootentry;
 mod cmdline;
 mod esp;
@@ -10,18 +11,39 @@ mod hooks;
 mod install;
 mod kernels;
 mod mkconfig;
+
+const USAGE: &str = "usage: ferriboot <command> [options]
+
+commands:
+  install     install the bootloader to the ESP, generate the config,
+              register a firmware boot entry, copy ferriboot to
+              /usr/local/bin and install the kernel update hook
+  mkconfig    find kernels, copy them to the ESP if needed and write
+              EFI/ferriboot/ferriboot.conf
+  uninstall   remove the boot entry, EFI/ferriboot on the ESP, the
+              kernel update hook and /usr/local/bin/ferriboot
+  help        show this help
+
+options:
+  --dry-run   show what would be done without changing anything
+  --efi PATH  (install) bootloader image to install
+              [default: /usr/lib/ferriboot/ferriboot.efi]
+
+install, mkconfig and uninstall need root: sudo ferriboot <command>
+";
+
 fn die(msg: &str) -> ! {
     eprintln!("ferriboot: {}", msg);
     std::process::exit(1);
 }
 fn require_root() {
     let Ok(meta) = fs::metadata("/proc/self") else {
-        die("cannot check user id (/proc/self)");
+        die("cannot check user id (/proc/self)")
     };
 
     let uid = meta.uid();
     if uid != 0 {
-        die("install must be run as root (try: sudo ferriboot install)")
+        die("must be run as root (try: sudo ferriboot <command>)")
     }
 }
 fn cmd_mkconfig(dry_run: bool) {
@@ -205,7 +227,7 @@ fn cmd_install(args: &[String], dry_run: bool) {
     };
 
     if let Some(entry) = label {
-        eprintln!("boot entry {} already exists", entry);
+        eprintln!("ferriboot: boot entry Boot{} already exists", entry);
     } else {
         let esp_partition_result = bootentry::esp_partition(&esp);
 
@@ -225,12 +247,13 @@ fn cmd_install(args: &[String], dry_run: bool) {
             {
                 die(&e);
             };
+            eprintln!("ferriboot: created boot entry ferriboot");
         }
     }
 
     let exe = match std::env::current_exe() {
         Ok(p) => p,
-        Err(e) => die(format!("cannot find own binary {}", e).as_str()),
+        Err(e) => die(&format!("cannot find own binary: {}", e)),
     };
     let target = PathBuf::from("/usr/local/bin/ferriboot");
     let same = target.exists() && fs::canonicalize(&exe).ok() == fs::canonicalize(&target).ok();
@@ -262,24 +285,7 @@ fn cmd_install(args: &[String], dry_run: bool) {
 }
 
 fn cmd_help() {
-    eprintln!(
-        "usage: ferriboot <command> [options]
-
-    commands:
-      install     install the bootloader to the ESP, register it in the
-                  firmware, generate the config and copy ferriboot to
-                  /usr/local/bin
-      mkconfig    find kernels, copy them to the ESP if needed and write
-                  EFI/ferriboot/ferriboot.conf
-      help        show this help
-
-    options:
-      --dry-run   show what would be done without changing anything
-      --efi PATH  (install) bootloader image to install
-                  [default: /usr/lib/ferriboot/ferriboot.efi]
-
-    most commands need root: sudo ferriboot <command>"
-    );
+    print!("{}", USAGE);
 }
 
 fn cmd_uninstall(dry_run: bool) {
@@ -294,17 +300,56 @@ fn cmd_uninstall(dry_run: bool) {
 
     if let Some(entr) = entry {
         if dry_run {
-            eprintln!("ferriboot: would remove boot entry {}", entr);
+            eprintln!("ferriboot: would remove boot entry Boot{}", entr);
         } else {
             if let Err(e) = bootentry::delete_entry(&entr) {
                 die(&e)
             };
 
-            eprintln!("ferriboot: removed boot entry {}", entr);
+            eprintln!("ferriboot: removed boot entry Boot{}", entr);
         }
     } else {
         eprintln!("ferriboot: no boot entry found");
     }
+
+    let Some(esp) = find_esp() else {
+        die("ESP not found (checked /boot, /efi, /boot/efi)");
+    };
+
+    let dir = esp.join("EFI/ferriboot");
+
+    if dir.exists() {
+        if dry_run {
+            eprintln!("ferriboot: would remove {}", dir.display());
+        } else {
+            if let Err(e) = fs::remove_dir_all(&dir) {
+                die(&format!("cannot remove {}: {}", dir.display(), e));
+            };
+
+            eprintln!("ferriboot: removed {}", dir.display());
+        }
+    }
+
+    if let Err(e) = hooks::remove_hooks(dry_run) {
+        die(&e)
+    };
+
+    let bin = Path::new("/usr/local/bin/ferriboot");
+    if bin.exists() {
+        if dry_run {
+            eprintln!("ferriboot: would remove {}", bin.display());
+        } else {
+            if let Err(e) = fs::remove_file(bin) {
+                die(&format!("cannot remove {}: {}", bin.display(), e));
+            };
+
+            eprintln!("ferriboot: removed {}", bin.display());
+        }
+    }
+
+    eprintln!(
+        "ferriboot: make sure another bootloader is installed and registered in the firmware, otherwise the system will not boot"
+    );
 }
 
 fn main() {
@@ -323,11 +368,14 @@ fn main() {
         Some("uninstall") => {
             cmd_uninstall(dry_run);
         }
-        Some("help") => {
+        Some("help") | Some("--help") | Some("-h") => {
             cmd_help();
         }
         _ => {
-            eprintln!("usage: ferriboot <mkconfig|install>");
+            if let Some(cmd) = first {
+                eprintln!("ferriboot: unknown command '{}'", cmd);
+            }
+            eprint!("{}", USAGE);
             std::process::exit(1);
         }
     };

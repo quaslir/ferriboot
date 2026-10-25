@@ -1,5 +1,4 @@
 use std::{
-    arch::x86_64::_mm_mask_blend_epi32,
     fs,
     path::{Path, PathBuf},
 };

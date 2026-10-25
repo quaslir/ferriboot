@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub fn find_esp() -> Option<PathBuf> {
     let candidates = ["/boot", "/efi", "/boot/efi"];

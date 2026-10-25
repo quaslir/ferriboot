@@ -1,4 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::{
+    cmp::Ordering,
+    iter::Peekable,
+    path::{Path, PathBuf},
+    str::Chars,
+};
 #[derive(Clone)]
 pub struct Kernel {
     pub variant: String,
@@ -53,7 +58,7 @@ pub fn find_all_kernels(esp: &Path) -> Result<Vec<Kernel>, String> {
             }
         }
     }
-    all.sort_by(|a, b| a.variant.cmp(&b.variant));
+    all.sort_by(|a, b| kernel_cmp(&a.variant, &b.variant));
     all.sort_by_key(|kernel| kernel.variant.starts_with("0-rescue"));
     Ok(all)
 }
@@ -90,4 +95,60 @@ pub fn find_kernels(esp: &Path) -> std::io::Result<Vec<Kernel>> {
     }
 
     Ok(kernels)
+}
+
+fn next_chunk(it: &mut Peekable<Chars>) -> Option<String> {
+    let Some(next) = it.peek() else {
+        return None;
+    };
+
+    let is_digit = next.is_ascii_digit();
+    let mut str = String::new();
+
+    while let Some(next) = it.peek() {
+        if next.is_ascii_digit() != is_digit {
+            break;
+        }
+        str.push(it.next().unwrap());
+    }
+
+    Some(str)
+}
+
+fn natural_cmp(a: &str, b: &str) -> Ordering {
+    let mut it_a = a.chars().peekable();
+    let mut it_b = b.chars().peekable();
+
+    loop {
+        match (next_chunk(&mut it_a), next_chunk(&mut it_b)) {
+            (None, None) => return Ordering::Equal,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (Some(x), Some(y)) => {
+                let both_digits = x.chars().next().is_some_and(|c| c.is_ascii_digit())
+                    && y.chars().next().is_some_and(|c| c.is_ascii_digit());
+                let ord = if both_digits {
+                    let xt = x.trim_start_matches('0');
+                    let yt = y.trim_start_matches('0');
+                    xt.len().cmp(&yt.len()).then_with(|| xt.cmp(yt))
+                } else {
+                    x.cmp(&y)
+                };
+
+                if ord != Ordering::Equal {
+                    return ord;
+                }
+            }
+        }
+    }
+}
+
+fn kernel_cmp(a: &str, b: &str) -> Ordering {
+    let both_digits = a.chars().next().is_some_and(|c| c.is_ascii_digit())
+        && b.chars().next().is_some_and(|c| c.is_ascii_digit());
+    if both_digits {
+        natural_cmp(b, a)
+    } else {
+        natural_cmp(a, b)
+    }
 }

@@ -1,6 +1,5 @@
 use std::{
     fs,
-    ops::RangeBounds,
     path::{Path, PathBuf},
 };
 pub const LOADER_PATH: &str = "\\EFI\\ferriboot\\ferriboot.efi";

@@ -3,6 +3,7 @@ use std::{
     fs::{self, Permissions},
     path::Path,
 };
+
 const PACMAN_HOOK: &str = "[Trigger]
 Type = Path
 Operation = Install
@@ -31,6 +32,13 @@ exit 0\n";
 
 const DEBIAN_POSTINST_PATH: &str = "/etc/kernel/postinst.d/zz-ferriboot";
 const DEBIAN_POSTRM_PATH: &str = "/etc/kernel/postrm.d/zz-ferriboot";
+
+const ALL_HOOKS: [&str; 4] = [
+    PACMAN_HOOK_PATH,
+    DEBIAN_POSTINST_PATH,
+    DEBIAN_POSTRM_PATH,
+    KERNEL_INSTALL_HOOK_PATH,
+];
 
 pub fn install_hooks(dry_run: bool) -> Result<(), String> {
     if Path::new("/etc/pacman.d").exists() {
@@ -83,5 +91,22 @@ fn write_file(path: &str, content: &str, mode: u32, dry_run: bool) -> Result<(),
         )
     })?;
     eprintln!("ferriboot: installed {}", path.display());
+    Ok(())
+}
+
+pub fn remove_hooks(dry_run: bool) -> Result<(), String> {
+    for hook in ALL_HOOKS {
+        let path = Path::new(hook);
+        if path.exists() {
+            if dry_run {
+                eprintln!("would remove {}", path.display());
+            } else {
+                fs::remove_file(path)
+                    .map_err(|e| format!("cannot remove {}:{}", path.display(), e))?;
+                eprintln!("removed {}", path.display());
+            }
+        }
+    }
+
     Ok(())
 }
