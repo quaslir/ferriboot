@@ -28,6 +28,7 @@ options:
   --dry-run   show what would be done without changing anything
   --efi PATH  (install) bootloader image to install
               [default: /usr/lib/ferriboot/ferriboot.efi]
+  --if-installed  (mkconfig) do nothing unless ferriboot is installed on the ESP
 
 install, mkconfig and uninstall need root: sudo ferriboot <command>
 ";
@@ -54,11 +55,16 @@ fn require_root() {
         die("must be run as root (try: sudo ferriboot <command>)")
     }
 }
-fn cmd_mkconfig(dry_run: bool) {
+fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
     let Some(esp) = esp::find_esp() else {
+        if if_installed {
+            return;
+        }
         die("ESP not found (checked /boot, /efi, /boot/efi)");
     };
-
+    if if_installed && !esp.join("EFI/ferriboot/ferriboot.efi").exists() {
+        return;
+    }
     let find_kernels = kernels::find_all_kernels(&esp);
 
     let kernels = match find_kernels {
@@ -225,7 +231,7 @@ fn cmd_install(args: &[String], dry_run: bool) {
         eprintln!("ferriboot: installed {}", dest.display());
     }
 
-    cmd_mkconfig(dry_run);
+    cmd_mkconfig(dry_run, false);
     let find_entry_result = bootentry::find_entry(LOADER_PATH);
 
     let label = match find_entry_result {
@@ -362,9 +368,10 @@ fn main() {
 
     let first = args.get(1).map(|s| s.as_str());
     let dry_run = args.iter().any(|e| e == "--dry-run");
+    let if_installed = args.iter().any(|s| s == "--if-installed");
     match first {
         Some("mkconfig") => {
-            cmd_mkconfig(dry_run);
+            cmd_mkconfig(dry_run, if_installed);
         }
         Some("install") => {
             cmd_install(&args, dry_run);
