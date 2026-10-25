@@ -39,9 +39,9 @@ pub fn graphics_info() -> uefi::Result<Framebuffer> {
         base: addr as u64,
         width: w,
         height: h,
-        size: size,
-        stride: stride,
-        pixel_format: pixel_format,
+        size,
+        stride,
+        pixel_format,
     };
     Ok(framebuffer)
 }

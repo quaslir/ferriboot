@@ -54,11 +54,10 @@ pub fn select_entry(config: &config::Config) -> usize {
                         }
                         redraw = true;
                     }
-                    Key::Printable(c) => {
-                        if char::from(c) == '\r' {
+                    Key::Printable(c)
+                        if char::from(c) == '\r' => {
                             return selected;
                         }
-                    }
                     _ => {}
                 }
             }
@@ -69,7 +68,7 @@ pub fn select_entry(config: &config::Config) -> usize {
                     ticks_left -= 1;
                     if ticks_left == 0 {
                         return selected;
-                    } else if ticks_left % 10 == 0 {
+                    } else if ticks_left.is_multiple_of(10) {
                         redraw = true;
                     }
                 }

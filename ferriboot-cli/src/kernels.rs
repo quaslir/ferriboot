@@ -32,11 +32,10 @@ pub fn find_all_kernels(esp: &Path) -> Result<Vec<Kernel>, String> {
     let mut dirs = Vec::new();
     dirs.push(esp.to_path_buf());
 
-    if let (Ok(boot), Ok(esp_real)) = (std::fs::canonicalize("/boot"), std::fs::canonicalize(esp)) {
-        if boot != esp_real {
+    if let (Ok(boot), Ok(esp_real)) = (std::fs::canonicalize("/boot"), std::fs::canonicalize(esp))
+        && boot != esp_real {
             dirs.push(boot);
         }
-    }
 
     let mut all = Vec::<Kernel>::new();
 

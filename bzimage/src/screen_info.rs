@@ -42,12 +42,12 @@ pub fn fill_screen_info(
         // First 4 values are the same for RGB and BGR
         params[i] = CHANNEL_SIZE;
     }
-    let rb_values: (u8, u8);
-    if is_bgr {
-        rb_values = (16, 0);
+    
+    let rb_values: (u8, u8) = if is_bgr {
+        (16, 0)
     } else {
-        rb_values = (0, 16);
-    }
+        (0, 16)
+    };
 
     params[CHANNEL_POS_OFFSETS[0]] = rb_values.0;
     params[CHANNEL_POS_OFFSETS[1]] = CHANNEL_SIZE;

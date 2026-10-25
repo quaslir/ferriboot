@@ -17,7 +17,7 @@ fn distro_name() -> String {
             }
         }
     }
-    return "Linux".to_string();
+    "Linux".to_string()
 }
 
 pub fn build_config(kernels: &[Kernel], cmd: &str, esp: &Path) -> config::Config {

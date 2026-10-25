@@ -79,15 +79,15 @@ fn write_file(path: &str, content: &str, mode: u32, dry_run: bool) -> Result<(),
     };
 
     fs::create_dir_all(parent)
-        .map_err(|e| format!("cannot create {}: {}", parent.display(), e.to_string()))?;
+        .map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
     fs::write(path, content)
-        .map_err(|e| format!("cannot write {} : {}", path.display(), e.to_string()))?;
+        .map_err(|e| format!("cannot write {} : {}", path.display(), e))?;
 
     fs::set_permissions(path, Permissions::from_mode(mode)).map_err(|e| {
         format!(
             "cannot set permissions on {}: {}",
             path.display(),
-            e.to_string()
+            e
         )
     })?;
     eprintln!("ferriboot: installed {}", path.display());

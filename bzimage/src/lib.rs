@@ -6,8 +6,8 @@ pub mod efi_info;
 pub mod screen_info;
 pub mod setup;
 mod utils;
-use {e820::*, setup::*, utils::*};
-
+use crate::setup::*;
+use utils::*;
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     TooShort,
@@ -35,7 +35,7 @@ pub struct SetupHeader {
 }
 impl SetupHeader {
     pub fn kernel_offset(&self) -> usize {
-        return (self.setup_sects as usize + 1) * 512;
+        (self.setup_sects as usize + 1) * 512
     }
 }
 

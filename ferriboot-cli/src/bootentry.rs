@@ -12,8 +12,8 @@ pub fn run(program: &str, args: &[&str]) -> Result<String, String> {
     };
 
     match output.status.success() {
-        true => return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string()),
-        false => return Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        true => Ok(String::from_utf8_lossy(&output.stdout).trim().to_string()),
+        false => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
     }
 }
 

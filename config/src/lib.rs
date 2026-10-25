@@ -76,7 +76,7 @@ pub struct Config {
 
 impl Config {
     pub fn default_entry(&self) -> &Entry {
-        return &self.entries[self.default];
+        &self.entries[self.default]
     }
 }
 
@@ -84,7 +84,7 @@ impl core::fmt::Display for Config {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         writeln!(f, "timeout: {}", self.timeout)?;
         writeln!(f, "default: {}", self.default + 1)?;
-        writeln!(f, "")?;
+        writeln!(f)?;
 
         for entry in &self.entries {
             writeln!(f, "/{}", entry.name)?;
@@ -97,7 +97,7 @@ impl core::fmt::Display for Config {
                 writeln!(f, "cmdline: {}", cmdline)?;
             }
 
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
         Ok(())
     }
@@ -208,7 +208,7 @@ fn apply_entry_key(
     match key {
         "protocol" => {
             let protocol = parse_protocol(value).ok_or(ConfigError {
-                line: line,
+                line,
                 kind: ErrorKind::UnknownProtocol,
             })?;
             entry.protocol = Some(protocol);
@@ -219,14 +219,14 @@ fn apply_entry_key(
         "cmdline" => entry.cmdline = Some(String::from(value)),
         "timeout" | "default" => {
             return Err(ConfigError {
-                line: line,
+                line,
                 kind: ErrorKind::GlobalKeyInsideEntry,
             });
         }
 
         _ => {
             return Err(ConfigError {
-                line: line,
+                line,
                 kind: ErrorKind::UnknownKey,
             });
         }

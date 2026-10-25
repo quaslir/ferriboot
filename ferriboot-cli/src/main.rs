@@ -104,11 +104,10 @@ fn cmd_mkconfig(dry_run: bool) {
         print!("{}", text);
     } else {
         for (from, to) in &copies {
-            if let Some(dir) = to.parent() {
-                if let Err(e) = create_dir_all(dir) {
+            if let Some(dir) = to.parent()
+                && let Err(e) = create_dir_all(dir) {
                     die(&format!("cannot create {}: {}", dir.display(), e));
                 }
-            }
             if let Err(e) = fs::copy(from, to) {
                 die(&format!(
                     "cannot copy {} -> {}: {}",
@@ -126,7 +125,7 @@ fn cmd_mkconfig(dry_run: bool) {
             die(format!(
                 "cannot create {}: {}",
                 parent.display(),
-                e.kind().to_string()
+                e.kind()
             )
             .as_str());
         };
@@ -136,7 +135,7 @@ fn cmd_mkconfig(dry_run: bool) {
                 die(format!(
                     "cannot back up {}: {}",
                     conf_path.display(),
-                    e.kind().to_string(),
+                    e.kind(),
                 )
                 .as_str());
             }
@@ -145,7 +144,7 @@ fn cmd_mkconfig(dry_run: bool) {
             die(format!(
                 "cannot write {}: {}",
                 conf_path.display(),
-                e.kind().to_string()
+                e.kind()
             )
             .as_str());
         };

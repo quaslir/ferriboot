@@ -32,7 +32,7 @@ pub fn fill_boot_params(
         return Err(ParseError::TooShort);
     }
 
-    let header = parse_setup_header(kernel)?;
+    let _header = parse_setup_header(kernel)?;
     let mut copy_limit: usize = 0x202;
     copy_limit += kernel[0x201] as usize;
     params[0x1F1..copy_limit].copy_from_slice(&kernel[0x1F1..copy_limit]);
