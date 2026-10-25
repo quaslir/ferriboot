@@ -4,6 +4,7 @@ use std::path::PathBuf;
 mod bootentry;
 mod cmdline;
 mod esp;
+mod hooks;
 mod install;
 mod kernels;
 mod mkconfig;
@@ -251,6 +252,10 @@ fn cmd_install(args: &[String], dry_run: bool) {
         };
 
         eprintln!("ferriboot: installed {}", target.display());
+    }
+
+    if let Err(e) = hooks::install_hooks(dry_run) {
+        die(&e)
     }
 }
 
