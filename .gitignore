@@ -12,3 +12,4 @@ bzimage/tests/vmlinuz
 /packaging/arch/pkg
 /packaging/arch/*.tar.gz
 /packaging/arch/*.pkg.tar.zst
+/dist
