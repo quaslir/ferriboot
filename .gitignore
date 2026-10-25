@@ -13,3 +13,4 @@ bzimage/tests/vmlinuz
 /packaging/arch/*.tar.gz
 /packaging/arch/*.pkg.tar.zst
 /dist
+/packaging/arch/*.sig
