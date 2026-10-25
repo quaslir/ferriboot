@@ -34,6 +34,20 @@ This copies the bootloader to `EFI/ferriboot/` on the ESP, writes
 Keep another bootloader installed until you have checked that ferriboot
 boots your system.
 
+## Installing on Arch Linux
+
+The AUR package is coming soon. Until then you can build it from this repository:
+
+    git clone https://github.com/quaslir/ferriboot
+    cd ferriboot/packaging/arch
+    makepkg -si
+    sudo ferriboot install
+
+The package installs `/usr/bin/ferriboot`, the bootloader image in
+`/usr/lib/ferriboot/` and a pacman hook that updates the config after
+kernel updates. `sudo ferriboot install` puts the bootloader on the ESP
+and registers it in the firmware.
+
 ## Usage
 
     sudo ferriboot mkconfig            # regenerate the config
