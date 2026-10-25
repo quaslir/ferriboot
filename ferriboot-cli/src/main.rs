@@ -32,6 +32,14 @@ options:
 install, mkconfig and uninstall need root: sudo ferriboot <command>
 ";
 
+fn installed_by_package(exe: &Path) -> bool {
+    let Ok(res) = fs::canonicalize(exe) else {
+        return false;
+    };
+
+    return res.starts_with("/usr/bin");
+}
+
 fn die(msg: &str) -> ! {
     eprintln!("ferriboot: {}", msg);
     std::process::exit(1);
@@ -105,9 +113,10 @@ fn cmd_mkconfig(dry_run: bool) {
     } else {
         for (from, to) in &copies {
             if let Some(dir) = to.parent()
-                && let Err(e) = create_dir_all(dir) {
-                    die(&format!("cannot create {}: {}", dir.display(), e));
-                }
+                && let Err(e) = create_dir_all(dir)
+            {
+                die(&format!("cannot create {}: {}", dir.display(), e));
+            }
             if let Err(e) = fs::copy(from, to) {
                 die(&format!(
                     "cannot copy {} -> {}: {}",
@@ -122,31 +131,16 @@ fn cmd_mkconfig(dry_run: bool) {
         let conf_path = esp.join("EFI/ferriboot/ferriboot.conf");
         let parent = conf_path.parent().unwrap();
         if let Err(e) = std::fs::create_dir_all(parent) {
-            die(format!(
-                "cannot create {}: {}",
-                parent.display(),
-                e.kind()
-            )
-            .as_str());
+            die(format!("cannot create {}: {}", parent.display(), e.kind()).as_str());
         };
         if conf_path.exists() {
             let backup = conf_path.with_extension("conf.bak");
             if let Err(e) = std::fs::copy(&conf_path, &backup) {
-                die(format!(
-                    "cannot back up {}: {}",
-                    conf_path.display(),
-                    e.kind(),
-                )
-                .as_str());
+                die(format!("cannot back up {}: {}", conf_path.display(), e.kind(),).as_str());
             }
         }
         if let Err(e) = std::fs::write(&conf_path, &text) {
-            die(format!(
-                "cannot write {}: {}",
-                conf_path.display(),
-                e.kind()
-            )
-            .as_str());
+            die(format!("cannot write {}: {}", conf_path.display(), e.kind()).as_str());
         };
 
         eprintln!(
@@ -172,6 +166,20 @@ fn cmd_install(args: &[String], dry_run: bool) {
     if !dry_run {
         require_root();
     }
+
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => die(&format!("cannot find own binary: {}", e)),
+    };
+
+    let packaged = installed_by_package(&exe);
+
+    if packaged {
+        eprintln!(
+            "ferriboot: installed by a package, binary and kernel hook are managed by pacman"
+        );
+    }
+
     let efi = args.iter().position(|s| s == "--efi");
 
     let path_str = match efi {
@@ -249,37 +257,34 @@ fn cmd_install(args: &[String], dry_run: bool) {
             eprintln!("ferriboot: created boot entry ferriboot");
         }
     }
-
-    let exe = match std::env::current_exe() {
-        Ok(p) => p,
-        Err(e) => die(&format!("cannot find own binary: {}", e)),
-    };
-    let target = PathBuf::from("/usr/local/bin/ferriboot");
-    let same = target.exists() && fs::canonicalize(&exe).ok() == fs::canonicalize(&target).ok();
-    if same {
-        eprintln!("ferriboot: /usr/local/bin/ferriboot is already the running binary");
-    } else if dry_run {
-        eprintln!(
-            "ferriboot: would install {} -> {}",
-            exe.display(),
-            target.display()
-        );
-    } else {
-        if let Err(e) = fs::copy(&exe, &target) {
-            die(format!(
-                "cannot copy {} -> {}: {}",
+    if !packaged {
+        let target = PathBuf::from("/usr/local/bin/ferriboot");
+        let same = target.exists() && fs::canonicalize(&exe).ok() == fs::canonicalize(&target).ok();
+        if same {
+            eprintln!("ferriboot: /usr/local/bin/ferriboot is already the running binary");
+        } else if dry_run {
+            eprintln!(
+                "ferriboot: would install {} -> {}",
                 exe.display(),
-                target.display(),
-                e
-            )
-            .as_str());
-        };
+                target.display()
+            );
+        } else {
+            if let Err(e) = fs::copy(&exe, &target) {
+                die(format!(
+                    "cannot copy {} -> {}: {}",
+                    exe.display(),
+                    target.display(),
+                    e
+                )
+                .as_str());
+            };
 
-        eprintln!("ferriboot: installed {}", target.display());
-    }
+            eprintln!("ferriboot: installed {}", target.display());
+        }
 
-    if let Err(e) = hooks::install_hooks(dry_run) {
-        die(&e)
+        if let Err(e) = hooks::install_hooks(dry_run) {
+            die(&e)
+        }
     }
 }
 
