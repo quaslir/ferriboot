@@ -54,6 +54,7 @@ pub fn find_all_kernels(esp: &Path) -> Result<Vec<Kernel>, String> {
         }
     }
     all.sort_by(|a, b| a.variant.cmp(&b.variant));
+    all.sort_by_key(|kernel| kernel.variant.starts_with("0-rescue"));
     Ok(all)
 }
 
