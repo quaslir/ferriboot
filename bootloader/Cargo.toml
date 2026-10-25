@@ -1,7 +1,10 @@
 [package]
 name = "bootloader"
-version = "0.1.0"
-edition = "2024"
+description = "UEFI bootloader that boots Linux via the x86 boot protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 log = "0.4.34"

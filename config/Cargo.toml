@@ -1,6 +1,9 @@
 [package]
 name = "config"
-version = "0.1.0"
-edition = "2024"
+description = "Parser and writer for the ferriboot configuration format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
