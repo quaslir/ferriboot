@@ -36,17 +36,30 @@ boots your system.
 
 ## Installing on Arch Linux
 
-The AUR package is coming soon. Until then you can build it from this repository:
+Add the ferriboot repository and its signing key once:
 
-    git clone https://github.com/quaslir/ferriboot
-    cd ferriboot/packaging/arch
-    makepkg -si
-    sudo ferriboot install
+```
+curl -L -o /tmp/ferriboot.asc https://github.com/quaslir/ferriboot/releases/download/repo/ferriboot.asc
+sudo pacman-key --add /tmp/ferriboot.asc
+sudo pacman-key --lsign-key 0F932E1F8911EEBDAE9E2680EA7C543494A99C91
+```
 
-The package installs `/usr/bin/ferriboot`, the bootloader image in
-`/usr/lib/ferriboot/` and a pacman hook that updates the config after
-kernel updates. `sudo ferriboot install` puts the bootloader on the ESP
-and registers it in the firmware.
+Append to `/etc/pacman.conf`:
+
+```
+[ferriboot]
+SigLevel = Required DatabaseRequired
+Server = https://github.com/quaslir/ferriboot/releases/download/repo
+```
+
+Then:
+
+```
+sudo pacman -Syu ferriboot
+sudo ferriboot install
+```
+
+Alternatively, build the package yourself from `packaging/arch` with `makepkg -si`.
 
 ## Usage
 
