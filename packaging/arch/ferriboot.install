@@ -1,0 +1,15 @@
+post_install() {
+    echo ">>> To install ferriboot to the ESP and register it in the firmware, run:"
+    echo ">>>     sudo ferriboot install"
+    echo ">>> Keep another bootloader installed until ferriboot boots your system."
+}
+
+post_upgrade() {
+    echo ">>> To update the bootloader on the ESP, run:"
+    echo ">>>     sudo ferriboot install"
+}
+
+pre_remove() {
+    echo ">>> Run 'sudo ferriboot uninstall' before removing the package"
+    echo ">>> if ferriboot is still installed on the ESP."
+}

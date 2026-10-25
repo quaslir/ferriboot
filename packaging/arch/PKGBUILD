@@ -1,0 +1,40 @@
+# Maintainer: Daniil Nechai <karl33060@gmail.com>
+pkgname=ferriboot
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="UEFI bootloader for Linux written in Rust"
+arch=('x86_64')
+url="https://github.com/quaslir/ferriboot"
+license=('MIT')
+depends=('efibootmgr' 'util-linux' 'glibc' 'libgcc')
+makedepends=('rustup')
+options=('!debug')
+install=ferriboot.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        "ferriboot.hook")
+sha256sums=('a5f5c9a1470c043f9bd1c51cd51cfb3f54fbdb6fdd4371b748da7fdab07a6581'
+            '9deb6d3fff4e1eb1213d0fbd1babece9078942aac86756845426cabc70636128')
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    rustup target add "$CARCH-unknown-uefi"
+    cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+    cargo fetch --locked --target "$CARCH-unknown-uefi"
+}
+
+build() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release -p ferriboot-cli --target "$CARCH-unknown-linux-gnu"
+    RUSTFLAGS= cargo build --frozen --release -p bootloader --target "$CARCH-unknown-uefi"
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    install -Dm755 "target/$CARCH-unknown-linux-gnu/release/ferriboot" "$pkgdir/usr/bin/ferriboot"
+    install -Dm644 "target/$CARCH-unknown-uefi/release/bootloader.efi" "$pkgdir/usr/lib/ferriboot/ferriboot.efi"
+    install -Dm644 "$srcdir/ferriboot.hook" "$pkgdir/usr/share/libalpm/hooks/95-ferriboot.hook"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
