@@ -1,48 +1,56 @@
 # ferriboot
 
-A UEFI bootloader for Linux written in Rust. It loads the kernel and initrd
-from the EFI System Partition and starts Linux through the x86 boot protocol
-(not the EFI stub), with a small boot menu.
+![ferriboot booting Arch Linux](docs/boot.gif)
 
-`ferriboot` (the CLI) installs the bootloader, registers it in the firmware,
-generates the config and keeps it up to date after kernel updates.
+A UEFI bootloader for Linux written in Rust. It loads the kernel and initramfs from the EFI System Partition and starts Linux through the x86 boot protocol (not the EFI stub), and it can also chainload Unified Kernel Images (UKI) and other EFI applications. It comes with a small boot menu.
+
+`ferriboot` (the CLI) installs the bootloader, registers it in the firmware, generates the config and keeps it up to date after kernel updates.
+
+## How it boots
+
+- **Linux kernel + initramfs** (`protocol: linux`): ferriboot parses the bzImage setup header, loads the kernel and initramfs, builds `boot_params` (e820 memory map, framebuffer, EFI system table, ACPI RSDP) and jumps into the kernel after `ExitBootServices`.
+- **UKI and other EFI applications** (`protocol: efi`): ferriboot loads the image with the firmware's `LoadImage` and starts it with `StartImage`. The kernel, initramfs and command line come from inside the UKI.
+
+`ferriboot mkconfig` picks up kernels (`vmlinuz-*`) from the ESP and `/boot`, and UKIs from `EFI/Linux/*.efi` on the ESP. UKIs are listed first.
 
 ## Compatibility
 
-| Distribution | Environment   | Boot | Kernel update hook                  |
-|--------------|---------------|------|-------------------------------------|
-| Arch Linux   | Real hardware | ✅   | ✅ pacman hook                       |
-| Fedora 44    | QEMU / OVMF   | ✅   | ✅ kernel-install plugin             |
-| Ubuntu       | QEMU / OVMF   | ✅   | ⚠️ `/etc/kernel/postinst.d` (untested) |
-| Debian       | —             | ⚠️   | ⚠️ `/etc/kernel/postinst.d` (untested) |
+| Distribution       | Environment   | Boot | Kernel update hook                     |
+|--------------------|---------------|------|----------------------------------------|
+| Arch Linux         | Real hardware | ✅   | ✅ pacman hook                          |
+| Arch Linux (UKI)   | Real hardware | ✅   | ⚠️ pacman hook                          |
+| Fedora 44          | QEMU / OVMF   | ✅   | ✅ kernel-install plugin                |
+| Ubuntu             | QEMU / OVMF   | ✅   | ⚠️ `/etc/kernel/postinst.d`             |
+| Debian             | —             | ⚠️   | ⚠️ `/etc/kernel/postinst.d`             |
 
 ✅ tested · ⚠️ implemented but not yet tested
 
-### Limitations
+## Limitations
 
 - x86_64 UEFI systems only
 - Secure Boot is not supported
-- Unified Kernel Images (UKI) are not supported yet; a separate kernel and initramfs are required
+- Only the ESP ferriboot is started from is searched; EFI applications on other disks are not reachable
+- Kernels without an initramfs are skipped by `mkconfig`
 - NixOS is not supported (it would need a dedicated NixOS module)
 
 ## Building
 
-    rustup target add x86_64-unknown-uefi
-    cargo build --release -p bootloader --target x86_64-unknown-uefi
-    cargo build --release -p ferriboot-cli --target x86_64-unknown-linux-gnu
+```
+rustup target add x86_64-unknown-uefi
+cargo build --release -p bootloader --target x86_64-unknown-uefi
+cargo build --release -p ferriboot-cli --target x86_64-unknown-linux-gnu
+```
 
 ## Installing
 
-    sudo ./target/x86_64-unknown-linux-gnu/release/ferriboot install \
-        --efi target/x86_64-unknown-uefi/release/bootloader.efi
+```
+sudo ./target/x86_64-unknown-linux-gnu/release/ferriboot install \
+    --efi target/x86_64-unknown-uefi/release/bootloader.efi
+```
 
-This copies the bootloader to `EFI/ferriboot/` on the ESP, writes
-`EFI/ferriboot/ferriboot.conf`, adds a firmware boot entry, installs
-`/usr/local/bin/ferriboot` and a kernel update hook
-(pacman, kernel-install or /etc/kernel/postinst.d).
+This copies the bootloader to `EFI/ferriboot/` on the ESP, writes `EFI/ferriboot/ferriboot.conf`, adds a firmware boot entry, installs `/usr/local/bin/ferriboot` and a kernel update hook (pacman, kernel-install or `/etc/kernel/postinst.d`).
 
-Keep another bootloader installed until you have checked that ferriboot
-boots your system.
+Keep another bootloader installed until you have checked that ferriboot boots your system.
 
 ## Installing on Arch Linux
 
@@ -73,9 +81,32 @@ Alternatively, build the package yourself from `packaging/arch` with `makepkg -s
 
 ## Usage
 
-    sudo ferriboot mkconfig            # regenerate the config
-    sudo ferriboot mkconfig --dry-run  # show what would change
-    sudo ferriboot uninstall           # remove everything
+```
+sudo ferriboot mkconfig            # regenerate the config
+sudo ferriboot mkconfig --dry-run  # show what would change
+sudo ferriboot uninstall           # remove everything
+```
+
+## Configuration
+
+The config lives at `EFI/ferriboot/ferriboot.conf` on the ESP and is generated by `ferriboot mkconfig`. Paths are relative to the ESP and use backslashes.
+
+```
+timeout: 3
+default: 1
+
+/Arch Linux (UKI: arch-linux)
+protocol: efi
+path: \EFI\Linux\arch-linux.efi
+
+/Arch Linux (linux)
+protocol: linux
+kernel: \vmlinuz-linux
+initrd: \initramfs-linux.img
+cmdline: root=UUID=... rw
+```
+
+`default` counts from 1. Manual edits are overwritten the next time `mkconfig` runs.
 
 ## License
 
