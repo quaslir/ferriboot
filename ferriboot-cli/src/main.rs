@@ -11,7 +11,7 @@ mod hooks;
 mod install;
 mod kernels;
 mod mkconfig;
-
+mod uki;
 const USAGE: &str = "usage: ferriboot <command> [options]
 
 commands:
