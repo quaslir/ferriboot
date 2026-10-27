@@ -47,18 +47,20 @@ pub fn build_config(kernels: &[Kernel], cmd: &str, esp: &Path) -> config::Config
         entries.push(config::Entry {
             name,
             protocol,
-            kernel: kernel_path.clone(),
+            kernel: Some(kernel_path.clone()),
             initrd,
             cmdline,
+            path: None,
         });
 
         if let Some(fallback) = kernel.fallback.as_ref().and_then(|f| to_uefi_path(esp, f)) {
             entries.push(config::Entry {
                 name: format!("{} ({}, fallback)", distro_name, kernel.variant),
                 protocol,
-                kernel: kernel_path,
+                kernel: Some(kernel_path),
                 initrd: Some(fallback),
                 cmdline: Some(cmd.to_string()),
+                path: None,
             });
         }
     }
