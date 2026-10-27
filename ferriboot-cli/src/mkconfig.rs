@@ -20,9 +20,31 @@ fn distro_name() -> String {
     "Linux".to_string()
 }
 
-pub fn build_config(kernels: &[Kernel], cmd: &str, esp: &Path) -> config::Config {
+pub fn build_config(kernels: &[Kernel], ukis: &[PathBuf], cmd: &str, esp: &Path) -> config::Config {
     let distro_name = distro_name();
     let mut entries = Vec::new();
+
+    for uki in ukis {
+        let Some(path) = to_uefi_path(esp, uki) else {
+            eprintln!(
+                "ferriboot: warning: skipping {}: not on the ESP",
+                uki.display()
+            );
+            continue;
+        };
+
+        let stem = uki.file_stem().and_then(|s| s.to_str()).unwrap_or("UKI");
+
+        entries.push(config::Entry {
+            name: format!("{} (UKI: {})", distro_name, stem),
+            protocol: config::Protocol::Efi,
+            kernel: None,
+            initrd: None,
+            cmdline: None,
+            path: Some(path),
+        });
+    }
+
     for kernel in kernels {
         let Some(kernel_path) = to_uefi_path(esp, &kernel.image) else {
             eprintln!(
@@ -32,10 +54,15 @@ pub fn build_config(kernels: &[Kernel], cmd: &str, esp: &Path) -> config::Config
             continue;
         };
         let initrd = match &kernel.initrd {
-            None => None,
+            None => {
+                continue;
+            }
             Some(p) => {
                 let Some(path) = to_uefi_path(esp, p) else {
-                    eprintln!();
+                    eprintln!(
+                        "ferriboot: warning: skipping {}: initramfs is not on the ESP",
+                        p.display()
+                    );
                     continue;
                 };
                 Some(path)

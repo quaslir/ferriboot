@@ -38,7 +38,7 @@ fn installed_by_package(exe: &Path) -> bool {
         return false;
     };
 
-    return res.starts_with("/usr/bin");
+    res.starts_with("/usr/bin")
 }
 
 fn die(msg: &str) -> ! {
@@ -67,13 +67,25 @@ fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
     }
     let find_kernels = kernels::find_all_kernels(&esp);
 
-    let kernels = match find_kernels {
+    let mut kernels = match find_kernels {
         Ok(k) => k,
         Err(e) => die(&e),
     };
 
-    if kernels.is_empty() {
-        die("no kernels (vmlinuz-*) found in the ESP or /boot");
+    kernels.retain(|k| {
+        if k.initrd.is_none() {
+            eprintln!(
+                "ferriboot: warning: skipping {}: no initramfs found",
+                k.image.display()
+            );
+            return false;
+        }
+
+        true
+    });
+    let ukis = uki::find_ukis(&esp);
+    if kernels.is_empty() && ukis.is_empty() {
+        die("no kernels or UKIs found in the ESP or /boot");
     }
     let mut planned = Vec::new();
     let mut copies = Vec::new();
@@ -91,7 +103,7 @@ fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
         Err(e) => die(e.as_str()),
     };
 
-    let config = mkconfig::build_config(&planned, &cmdline, &esp);
+    let config = mkconfig::build_config(&planned, &ukis, &cmdline, &esp);
     let text = config.to_string();
     let parse_result = config::parse(&text);
     if let Err(e) = parse_result {
