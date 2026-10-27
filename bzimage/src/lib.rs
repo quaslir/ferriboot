@@ -6,8 +6,8 @@ pub mod efi_info;
 pub mod screen_info;
 pub mod setup;
 mod utils;
-use crate::setup::*;
 use utils::*;
+use {crate::e820::*, crate::setup::*};
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     TooShort,

@@ -9,12 +9,14 @@ extern crate alloc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
     Linux,
+    Efi,
 }
 
 impl Protocol {
     pub fn as_str(&self) -> &'static str {
         match self {
             Protocol::Linux => "linux",
+            Protocol::Efi => "efi",
         }
     }
 }
@@ -23,9 +25,10 @@ impl Protocol {
 pub struct Entry {
     pub name: String,
     pub protocol: Protocol,
-    pub kernel: String,
+    pub kernel: Option<String>,
     pub initrd: Option<String>,
     pub cmdline: Option<String>,
+    pub path: Option<String>,
 }
 #[derive(Debug, Default)]
 struct PartialEntry {
@@ -34,25 +37,39 @@ struct PartialEntry {
     pub kernel: Option<String>,
     pub initrd: Option<String>,
     pub cmdline: Option<String>,
+    pub path: Option<String>,
     pub start_line: usize,
 }
 
 impl PartialEntry {
     pub fn finish(self) -> Result<Entry, ConfigError> {
-        let kernel = self.kernel.ok_or(ConfigError {
-            line: self.start_line,
-            kind: ErrorKind::MissingKernel,
-        })?;
+        let kernel = self.kernel;
+        let path = self.path;
+
         let protocol = self.protocol.ok_or(ConfigError {
             line: self.start_line,
             kind: ErrorKind::MissingProtocol,
         })?;
+
+        if protocol == Protocol::Linux && kernel.is_none() {
+            return Err(ConfigError {
+                line: self.start_line,
+                kind: ErrorKind::MissingKernel,
+            });
+        } else if protocol == Protocol::Efi && path.is_none() {
+            return Err(ConfigError {
+                line: self.start_line,
+                kind: ErrorKind::MissingPath,
+            });
+        }
+
         Ok(Entry {
             name: self.name,
             protocol,
             kernel,
             initrd: self.initrd,
             cmdline: self.cmdline,
+            path,
         })
     }
 
@@ -63,6 +80,7 @@ impl PartialEntry {
             kernel: None,
             initrd: None,
             cmdline: None,
+            path: None,
             start_line,
         }
     }
@@ -89,12 +107,17 @@ impl core::fmt::Display for Config {
         for entry in &self.entries {
             writeln!(f, "/{}", entry.name)?;
             writeln!(f, "protocol: {}", entry.protocol.as_str())?;
-            writeln!(f, "kernel: {}", entry.kernel)?;
+            if let Some(kernel) = &entry.kernel {
+                writeln!(f, "kernel: {}", kernel)?;
+            }
             if let Some(initrd) = &entry.initrd {
                 writeln!(f, "initrd: {}", initrd)?;
             }
             if let Some(cmdline) = &entry.cmdline {
                 writeln!(f, "cmdline: {}", cmdline)?;
+            }
+            if let Some(path) = &entry.path {
+                writeln!(f, "path: {}", path)?;
             }
 
             writeln!(f)?;
@@ -115,6 +138,7 @@ pub enum ErrorKind {
     MissingProtocol,
     NoEntries,
     DefaultOutOfRange,
+    MissingPath,
 }
 
 impl ErrorKind {
@@ -127,11 +151,12 @@ impl ErrorKind {
                 "'timeout' and 'default' must be before the first entry"
             }
             ErrorKind::InvalidNumber => "value is not a number",
-            ErrorKind::UnknownProtocol => "unknown protocol (expected 'linux')",
+            ErrorKind::UnknownProtocol => "unknown protocol (expected 'linux/efi')",
             ErrorKind::MissingKernel => "entry has no 'kernel'",
             ErrorKind::MissingProtocol => "entry has no 'protocol'",
             ErrorKind::NoEntries => "no boot entries defined",
             ErrorKind::DefaultOutOfRange => "'default' points to an entry that does not exist",
+            ErrorKind::MissingPath => "entry has no 'path'",
         }
     }
 }
@@ -175,7 +200,7 @@ fn apply_global(
             *default = v - 1;
         }
 
-        "kernel" | "initrd" | "cmdline" | "protocol" => {
+        "kernel" | "initrd" | "cmdline" | "path" | "protocol" => {
             return Err(ConfigError {
                 line,
                 kind: ErrorKind::KeyOutsideEntry,
@@ -195,6 +220,7 @@ fn apply_global(
 fn parse_protocol(value: &str) -> Option<Protocol> {
     match value {
         "linux" => Some(Protocol::Linux),
+        "efi" => Some(Protocol::Efi),
         _ => None,
     }
 }
@@ -217,6 +243,7 @@ fn apply_entry_key(
         "kernel" => entry.kernel = Some(String::from(value)),
         "initrd" => entry.initrd = Some(String::from(value)),
         "cmdline" => entry.cmdline = Some(String::from(value)),
+        "path" => entry.path = Some(String::from(value)),
         "timeout" | "default" => {
             return Err(ConfigError {
                 line,
@@ -294,7 +321,7 @@ pub fn parse(text: &str) -> Result<Config, ConfigError> {
 #[cfg(test)]
 
 mod tests {
-    use core::ptr::eq;
+    use core::{ffi::FromBytesWithNulError::NotNulTerminated, ptr::eq};
 
     use alloc::format;
 
@@ -315,6 +342,18 @@ mod tests {
         protocol: linux\n\
         kernel: vmlinuz-linux\n";
 
+    const FULL_UKI: &str = "timeout: 5\n\
+        default: 2\n\
+        \n\
+        /Arch Linux\n\
+            protocol: linux\n\
+            kernel: vmlinuz-linux\n\
+            initrd: initramfs-linux.img\n\
+        \n\
+        /Arch Linux (UKI)\n\
+            protocol: efi\n\
+            path: \\EFI\\Linux\\arch-linux.efi\n";
+
     fn append(extra: &str) -> String {
         format!("{}\n{}", BASE, extra)
     }
@@ -332,7 +371,8 @@ mod tests {
         assert_eq!(parsed.default, 0);
         assert_eq!(parsed.entries.len(), 1);
         assert_eq!(parsed.entries[0].name, "Arch");
-        assert_eq!(parsed.entries[0].kernel, "vmlinuz");
+        assert_eq!(parsed.entries[0].kernel.as_deref(), Some("vmlinuz"));
+        assert_eq!(parsed.entries[0].path, None);
         assert_eq!(parsed.entries[0].protocol, Protocol::Linux);
     }
 
@@ -348,7 +388,8 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].protocol, Protocol::Linux);
         assert_eq!(entries[0].name, "Arch Linux");
-        assert_eq!(entries[0].kernel, "vmlinuz-linux");
+        assert_eq!(entries[0].kernel.as_deref(), Some("vmlinuz-linux"));
+        assert_eq!(entries[0].path, None);
         assert_eq!(
             entries[0].cmdline.as_deref(),
             Some("root=UUID=1234 rw console=ttyS0,115200:8n1")
@@ -357,7 +398,36 @@ mod tests {
 
         assert_eq!(entries[1].protocol, Protocol::Linux);
         assert_eq!(entries[1].name, "Arch Linux (fallback)");
-        assert_eq!(entries[1].kernel, "vmlinuz-linux");
+        assert_eq!(entries[1].kernel.as_deref(), Some("vmlinuz-linux"));
+        assert_eq!(entries[1].path.as_deref(), None);
+        assert_eq!(entries[1].cmdline, None);
+        assert_eq!(entries[1].initrd, None);
+    }
+
+    #[test]
+
+    pub fn uki_full_working_config() {
+        let result = parse(FULL_UKI);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.timeout, 5);
+        assert_eq!(parsed.default, 1);
+        let entries = parsed.entries;
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].protocol, Protocol::Linux);
+        assert_eq!(entries[0].name, "Arch Linux");
+        assert_eq!(entries[0].kernel.as_deref(), Some("vmlinuz-linux"));
+        assert_eq!(entries[0].path, None);
+        assert_eq!(entries[0].cmdline.as_deref(), None);
+        assert_eq!(entries[0].initrd.as_deref(), Some("initramfs-linux.img"));
+
+        assert_eq!(entries[1].protocol, Protocol::Efi);
+        assert_eq!(entries[1].name, "Arch Linux (UKI)");
+        assert_eq!(entries[1].kernel, None);
+        assert_eq!(
+            entries[1].path.as_deref(),
+            Some("\\EFI\\Linux\\arch-linux.efi")
+        );
         assert_eq!(entries[1].cmdline, None);
         assert_eq!(entries[1].initrd, None);
     }
@@ -461,6 +531,19 @@ mod tests {
 
     #[test]
 
+    pub fn missing_path() {
+        let result = parse("/Arch\nprotocol: efi");
+        assert_eq!(
+            result,
+            Err(ConfigError {
+                line: 1,
+                kind: ErrorKind::MissingPath
+            })
+        );
+    }
+
+    #[test]
+
     pub fn missing_protocol() {
         let result = parse("/Arch\nkernel: vmlinuz");
         assert_eq!(
@@ -505,6 +588,18 @@ mod tests {
 
     pub fn config_to_string() {
         let result = parse(FULL);
+        assert!(!result.is_err());
+        let config = result.unwrap();
+        let string = config.to_string();
+        let config2 = parse(&string);
+        assert!(!config2.is_err());
+        assert_eq!(config2.unwrap(), config);
+    }
+
+    #[test]
+
+    pub fn uki_config_to_string() {
+        let result = parse(FULL_UKI);
         assert!(!result.is_err());
         let config = result.unwrap();
         let string = config.to_string();
