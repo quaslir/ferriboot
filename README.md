@@ -7,13 +7,23 @@ from the EFI System Partition and starts Linux through the x86 boot protocol
 `ferriboot` (the CLI) installs the bootloader, registers it in the firmware,
 generates the config and keeps it up to date after kernel updates.
 
-## Status
+## Compatibility
 
-Tested on Arch Linux (real hardware) and Fedora (QEMU/OVMF) and Ubuntu.
+| Distribution | Environment   | Boot | Kernel update hook                  |
+|--------------|---------------|------|-------------------------------------|
+| Arch Linux   | Real hardware | ✅   | ✅ pacman hook                       |
+| Fedora 44    | QEMU / OVMF   | ✅   | ✅ kernel-install plugin             |
+| Ubuntu       | QEMU / OVMF   | ✅   | ⚠️ `/etc/kernel/postinst.d` (untested) |
+| Debian       | —             | ⚠️   | ⚠️ `/etc/kernel/postinst.d` (untested) |
 
-Limitations:
-- x86_64 UEFI only
-- no Secure Boot support
+✅ tested · ⚠️ implemented but not yet tested
+
+### Limitations
+
+- x86_64 UEFI systems only
+- Secure Boot is not supported
+- Unified Kernel Images (UKI) are not supported yet; a separate kernel and initramfs are required
+- NixOS is not supported (it would need a dedicated NixOS module)
 
 ## Building
 
