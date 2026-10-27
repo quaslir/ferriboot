@@ -12,6 +12,7 @@ use uefi::{
     mem::memory_map::MemoryMap,
     prelude::*,
 };
+mod chainload;
 mod conf;
 mod fs;
 mod linux;

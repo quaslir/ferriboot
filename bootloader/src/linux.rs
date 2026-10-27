@@ -45,30 +45,27 @@ fn load_cmdline(cmd: &str, max_len: usize) -> uefi::Result<u64> {
 
 const ADDRESS_ALIGNMENT_MASK: u64 = 0x1FFFFF;
 pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
-    if entry.protocol != config::Protocol::Linux {
-        uefi::println!(
-            "ferriboot: entry '{}' uses an unsupported protocol",
-            entry.name
-        );
+    let Some(kernel) = &entry.kernel else {
+        uefi::println!("ferriboot: entry '{}' does not have a kernel", entry.name);
         return Err(uefi::Error::from(uefi::Status::UNSUPPORTED));
-    }
+    };
 
-    let kernel_path = CString16::try_from(entry.kernel.as_str()).map_err(|_| {
-        uefi::println!("ferriboot: invalid kernel path '{}'", entry.kernel);
+    let kernel_path = CString16::try_from(kernel.as_str()).map_err(|_| {
+        uefi::println!("ferriboot: invalid kernel path '{}'", kernel);
         uefi::Error::from(uefi::Status::LOAD_ERROR)
     })?;
 
     let mut vmlinuz_linux_file = fs::open_file(&kernel_path).inspect_err(|e| {
         uefi::println!(
             "ferriboot: cannot open kernel '{}' ({:?})",
-            entry.kernel,
+            kernel,
             e.status()
         );
     })?;
     let vmlinuz_linux_size = fs::file_size(&mut vmlinuz_linux_file).inspect_err(|e| {
         uefi::println!(
             "ferriboot: cannot read kernel '{}' ({:?})",
-            entry.kernel,
+            kernel,
             e.status()
         );
     })?;
@@ -78,7 +75,7 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
     fs::read_file(&mut vmlinuz_linux_file, &mut vmlinuz_linux).inspect_err(|e| {
         uefi::println!(
             "ferriboot: cannot read kernel '{}' ({:?})",
-            entry.kernel,
+            kernel,
             e.status()
         );
     })?;
@@ -86,7 +83,7 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
     let header = bzimage::setup::parse_setup_header(&vmlinuz_linux).map_err(|e| {
         uefi::println!(
             "ferriboot: '{}' is not a valid Linux bzImage ({:?})",
-            entry.kernel,
+            kernel,
             e
         );
         uefi::Error::from(uefi::Status::LOAD_ERROR)
@@ -154,13 +151,14 @@ pub fn load_linux(entry: &config::Entry) -> uefi::Result<LinuxImage> {
                     e.status()
                 );
             })?;
-            let initramfs_linux_size = fs::file_size(&mut initramfs_linux_file).inspect_err(|e| {
-                uefi::println!(
-                    "ferriboot: cannot read initrd '{}' ({:?})",
-                    initrd,
-                    e.status()
-                );
-            })?;
+            let initramfs_linux_size =
+                fs::file_size(&mut initramfs_linux_file).inspect_err(|e| {
+                    uefi::println!(
+                        "ferriboot: cannot read initrd '{}' ({:?})",
+                        initrd,
+                        e.status()
+                    );
+                })?;
             let initrd_ptr = boot::allocate_pages(
                 boot::AllocateType::MaxAddress(header.initrd_addr_max as u64),
                 MemoryType::LOADER_DATA,
