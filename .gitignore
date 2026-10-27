@@ -14,3 +14,10 @@ bzimage/tests/vmlinuz
 /packaging/arch/*.pkg.tar.zst
 /dist
 /packaging/arch/*.sig
+!/bench/bench.sh
+/bench/vmlinuz-linux
+/bench/initramfs-linux.img
+!/bench/bench.sh
+/bench/vmlinuz-linux
+/bench/initramfs-linux.img
+/bench/logs
