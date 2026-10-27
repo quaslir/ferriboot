@@ -12,6 +12,7 @@ use uefi::{
     mem::memory_map::MemoryMap,
     prelude::*,
 };
+mod chainload;
 mod conf;
 mod fs;
 mod linux;
@@ -38,23 +39,8 @@ fn hlt() -> ! {
     }
 }
 
-#[entry]
-fn main() -> Status {
-    if uefi::helpers::init().is_err() {
-        return Status::ABORTED;
-    }
-
-    let load_config = conf::load_config();
-    let conf = match load_config {
-        Ok(c) => c,
-        Err(e) => return fail(e),
-    };
-
-    let index = menu::select_entry(&conf);
-    system::with_stdout(|out| out.set_color(Color::LightGray, Color::Black)).ok();
-    system::with_stdout(|out| out.clear()).ok();
-    uefi::println!("Loading {}", conf.entries[index].name);
-    let load_linux = linux::load_linux(&conf.entries[index]);
+fn boot_linux_entry(entry: &config::Entry) -> Status {
+    let load_linux = linux::load_linux(entry);
 
     let image = match load_linux {
         Ok(img) => img,
@@ -92,5 +78,32 @@ fn main() -> Status {
             meta.desc_version as u32,
         );
         linux::boot_linux(image.kernel_base, image.boot_params_addr);
+    }
+}
+
+#[entry]
+fn main() -> Status {
+    if uefi::helpers::init().is_err() {
+        return Status::ABORTED;
+    }
+
+    let load_config = conf::load_config();
+    let conf = match load_config {
+        Ok(c) => c,
+        Err(e) => return fail(e),
+    };
+
+    let index = menu::select_entry(&conf);
+    system::with_stdout(|out| out.set_color(Color::LightGray, Color::Black)).ok();
+    system::with_stdout(|out| out.clear()).ok();
+
+    let entry = &conf.entries[index];
+    uefi::println!("Loading {}", entry.name);
+    match entry.protocol {
+        config::Protocol::Efi => match chainload::start_efi(entry) {
+            Ok(()) => Status::SUCCESS,
+            Err(e) => fail(e),
+        },
+        config::Protocol::Linux => boot_linux_entry(entry),
     }
 }

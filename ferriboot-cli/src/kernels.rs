@@ -33,9 +33,10 @@ pub fn find_all_kernels(esp: &Path) -> Result<Vec<Kernel>, String> {
     dirs.push(esp.to_path_buf());
 
     if let (Ok(boot), Ok(esp_real)) = (std::fs::canonicalize("/boot"), std::fs::canonicalize(esp))
-        && boot != esp_real {
-            dirs.push(boot);
-        }
+        && boot != esp_real
+    {
+        dirs.push(boot);
+    }
 
     let mut all = Vec::<Kernel>::new();
 
@@ -141,8 +142,7 @@ fn natural_cmp(a: &str, b: &str) -> Ordering {
         }
     }
 }
-
-fn kernel_cmp(a: &str, b: &str) -> Ordering {
+pub(crate) fn kernel_cmp(a: &str, b: &str) -> Ordering {
     let both_digits = a.chars().next().is_some_and(|c| c.is_ascii_digit())
         && b.chars().next().is_some_and(|c| c.is_ascii_digit());
     if both_digits {
