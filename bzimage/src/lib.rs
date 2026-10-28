@@ -40,16 +40,35 @@ impl SetupHeader {
 
 #[cfg(test)]
 mod tests {
+    use crate::setup::*;
     use crate::{
         ParseError::{self, BadBootFlag},
         read_u16, read_u32, read_u64,
         setup::{fill_boot_params, parse_setup_header},
     };
 
+    fn fake_kernel() -> [u8; 0x1000] {
+        let mut buf = [0u8; 0x1000];
+
+        buf[SETUP_SECTS_OFFSET] = 4;
+        buf[0x201] = 0x66; // jump offset: header ends at 0x202 + 0x66 = 0x268
+        buf[BOOT_FLAG_OFFSET..BOOT_FLAG_OFFSET + 2]
+            .copy_from_slice(&EXPECTED_BOOT_FLAG.to_le_bytes());
+        buf[HEADER_OFFSET..HEADER_OFFSET + 4].copy_from_slice(&EXPECTED_MAGIC.to_le_bytes());
+        buf[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&0x020Fu16.to_le_bytes());
+        buf[KERNEL_ALIGNMENT_OFFSET..KERNEL_ALIGNMENT_OFFSET + 4]
+            .copy_from_slice(&0x20_0000u32.to_le_bytes());
+        buf[XLOADFLAGS_OFFSET..XLOADFLAGS_OFFSET + 2].copy_from_slice(&XLF_KERNEL_64.to_le_bytes());
+        buf[INIT_SIZE_OFFSET..INIT_SIZE_OFFSET + 4].copy_from_slice(&0x0100_0000u32.to_le_bytes());
+        buf[INITRD_ADDR_MAX_OFFSET..INITRD_ADDR_MAX_OFFSET + 4]
+            .copy_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
+        buf
+    }
+
     #[test]
 
     pub fn correct_image() {
-        let buffer = include_bytes!("../tests/vmlinuz");
+        let buffer = &fake_kernel();
         let result = parse_setup_header(buffer);
         assert!(result.is_ok());
         let header = result.unwrap();
@@ -73,7 +92,7 @@ mod tests {
     }
     #[test]
     pub fn bad_boot_flag() {
-        let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
+        let mut buffer = fake_kernel();
         buffer[crate::setup::BOOT_FLAG_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::BadBootFlag)));
@@ -82,7 +101,7 @@ mod tests {
     #[test]
 
     pub fn bad_magic() {
-        let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
+        let mut buffer = fake_kernel();
         buffer[crate::setup::HEADER_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::BadMagic)));
@@ -91,7 +110,7 @@ mod tests {
     #[test]
 
     pub fn too_short2() {
-        let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
+        let mut buffer = fake_kernel().to_vec();
         buffer.truncate(0x400);
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::TooShort)));
@@ -99,14 +118,14 @@ mod tests {
 
     #[test]
     pub fn unsupported_version() {
-        let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
+        let mut buffer = fake_kernel();
         buffer[crate::setup::VERSION_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::UnsupportedVersion)));
     }
     #[test]
     pub fn no64bit_entry() {
-        let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
+        let mut buffer = fake_kernel();
         buffer[crate::setup::XLOADFLAGS_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::No64BitEntry)));
@@ -116,7 +135,7 @@ mod tests {
 
     pub fn fill_boot_params_test() {
         let mut arr: [u8; 4096] = [0u8; 4096];
-        let buffer = include_bytes!("../tests/vmlinuz");
+        let buffer = &fake_kernel().to_vec();
         let result = fill_boot_params(
             &mut arr,
             buffer,
