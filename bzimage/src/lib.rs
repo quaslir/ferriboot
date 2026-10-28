@@ -1,6 +1,4 @@
 #![no_std]
-
-use core::u8;
 pub mod e820;
 pub mod efi_info;
 pub mod screen_info;

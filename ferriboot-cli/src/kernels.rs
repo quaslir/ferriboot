@@ -96,11 +96,9 @@ pub fn find_kernels(esp: &Path) -> std::io::Result<Vec<Kernel>> {
 
     Ok(kernels)
 }
-#[allow(clippy::question_mark)]
+
 fn next_chunk(it: &mut Peekable<Chars>) -> Option<String> {
-    let Some(next) = it.peek() else {
-        return None;
-    };
+    let next = it.peek()?;
 
     let is_digit = next.is_ascii_digit();
     let mut str = String::new();
