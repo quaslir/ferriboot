@@ -12,6 +12,7 @@ use uefi::{
     mem::memory_map::MemoryMap,
     prelude::*,
 };
+mod bli;
 mod chainload;
 mod conf;
 mod fs;
@@ -96,8 +97,9 @@ fn main() -> Status {
     let index = menu::select_entry(&conf);
     system::with_stdout(|out| out.set_color(Color::LightGray, Color::Black)).ok();
     system::with_stdout(|out| out.clear()).ok();
-
     let entry = &conf.entries[index];
+    bli::set_loader_info(&entry.name);
+
     uefi::println!("Loading {}", entry.name);
     match entry.protocol {
         config::Protocol::Efi => match chainload::start_efi(entry) {
