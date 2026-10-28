@@ -404,3 +404,121 @@ fn main() {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use config::ErrorKind::NoEntries;
+
+    use super::*;
+    use crate::{kernels::Kernel, mkconfig::build_config};
+    use std::path::PathBuf;
+
+    const ESP: &str = "/boot";
+    const CMDLINE: &str = "root=UUID=1234 rw quiet";
+
+    fn fake_kernels() -> Vec<Kernel> {
+        vec![
+            Kernel {
+                variant: "linux".to_string(),
+                image: PathBuf::from("/boot/vmlinuz-linux"),
+                initrd: Some(PathBuf::from("/boot/initramfs-linux.img")),
+                fallback: Some(PathBuf::from("/boot/initramfs-linux-fallback.img")),
+            },
+            Kernel {
+                variant: "linux-lts".to_string(),
+                image: PathBuf::from("/boot/vmlinuz-linux-lts"),
+                initrd: Some(PathBuf::from("/boot/initramfs-linux-lts.img")),
+                fallback: None,
+            },
+        ]
+    }
+
+    fn fake_ukis() -> Vec<PathBuf> {
+        vec![PathBuf::from("/boot/EFI/Linux/arch-linux.efi")]
+    }
+
+    fn fake_windows() -> Option<PathBuf> {
+        Some(PathBuf::from("/boot/EFI/Microsoft/Boot/bootmgfw.efi"))
+    }
+
+    #[test]
+
+    pub fn quantity_and_order() {
+        let esp = PathBuf::from(ESP);
+        let config = build_config(&fake_kernels(), &fake_ukis(), fake_windows(), CMDLINE, &esp);
+        let expected = [
+            "(UKI: arch-linux)",
+            "(linux)",
+            "(linux, fallback)",
+            "(linux-lts)",
+            "Windows Boot Manager",
+        ];
+        assert_eq!(config.entries.len(), expected.len());
+
+        for (expected_name, entry) in expected.iter().zip(config.entries) {
+            assert!(entry.name.ends_with(expected_name));
+        }
+    }
+
+    #[test]
+
+    pub fn uefi_paths() {
+        let esp = PathBuf::from(ESP);
+        let config = build_config(&fake_kernels(), &fake_ukis(), fake_windows(), CMDLINE, &esp);
+        let entries = config.entries;
+        assert_eq!(entries.len(), 5);
+        assert_eq!(
+            entries[0].path.as_deref(),
+            Some(r"\EFI\Linux\arch-linux.efi")
+        );
+        assert_eq!(entries[0].kernel, None);
+        assert_eq!(entries[1].kernel.as_deref(), Some(r"\vmlinuz-linux"));
+        assert_eq!(entries[1].initrd.as_deref(), Some(r"\initramfs-linux.img"));
+        assert_eq!(entries[1].cmdline.as_deref(), Some(CMDLINE));
+        assert_eq!(
+            entries[2].initrd.as_deref(),
+            Some(r"\initramfs-linux-fallback.img")
+        );
+        assert_eq!(
+            entries[4].path.as_deref(),
+            Some(r"\EFI\Microsoft\Boot\bootmgfw.efi")
+        );
+        assert_eq!(entries[4].kernel, None);
+    }
+
+    #[test]
+
+    pub fn no_fallback_when_missing() {
+        let esp = PathBuf::from(ESP);
+        let config = build_config(&fake_kernels()[1..], &[], None, CMDLINE, &esp);
+        assert_eq!(config.entries.len(), 1);
+        assert!(config.entries[0].name.ends_with("(linux-lts)"));
+
+        for entry in config.entries {
+            assert!(!entry.name.contains("fallback"));
+        }
+    }
+
+    #[test]
+
+    pub fn file_outside_esp_skipped() {
+        let esp = PathBuf::from(ESP);
+        let uki_path = PathBuf::from("/home/user/x.efi");
+        let config = build_config(&[], &vec![uki_path], None, CMDLINE, &esp);
+        assert_eq!(config.entries.len(), 0);
+    }
+
+    #[test]
+
+    pub fn no_windows() {
+        let esp = PathBuf::from(ESP);
+        let config = build_config(&fake_kernels(), &fake_ukis(), None, CMDLINE, &esp);
+        assert_eq!(config.entries.len(), 4);
+        let win_search = config
+            .entries
+            .iter()
+            .any(|entry| entry.name.ends_with("Windows Boot Manager"));
+
+        assert_eq!(win_search, false);
+    }
+}

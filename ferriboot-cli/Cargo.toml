@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-config = { version = "0.1.0", path = "../config" }
+config = { version = "0.2.0", path = "../config" }
 
 [[bin]]
 name = "ferriboot"

@@ -9,5 +9,5 @@ repository.workspace = true
 [dependencies]
 log = "0.4.34"
 uefi = { version = "0.40.0", features = ["logger", "panic_handler", "alloc", "global_allocator"] }
-bzimage = { version = "0.1.0", path = "../bzimage" }
-config = { version = "0.1.0", path = "../config" }
+bzimage = { version = "0.2.0", path = "../bzimage" }
+config = { version = "0.2.0", path = "../config" }
