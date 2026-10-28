@@ -2,26 +2,31 @@
 
 ![ferriboot booting Arch Linux](docs/boot.gif)
 
-A UEFI bootloader for Linux written in Rust. It loads the kernel and initramfs from the EFI System Partition and starts Linux through the x86 boot protocol (not the EFI stub), and it can also chainload Unified Kernel Images (UKI) and other EFI applications. It comes with a small boot menu.
+A UEFI bootloader for Linux written in Rust. It loads the kernel and initramfs from the EFI System Partition and starts Linux through the x86 boot protocol (not the EFI stub). It can also chainload Unified Kernel Images (UKI), Windows Boot Manager and other EFI applications. It comes with a small boot menu.
 
 `ferriboot` (the CLI) installs the bootloader, registers it in the firmware, generates the config and keeps it up to date after kernel updates.
 
 ## How it boots
 
 - **Linux kernel + initramfs** (`protocol: linux`): ferriboot parses the bzImage setup header, loads the kernel and initramfs, builds `boot_params` (e820 memory map, framebuffer, EFI system table, ACPI RSDP) and jumps into the kernel after `ExitBootServices`.
-- **UKI and other EFI applications** (`protocol: efi`): ferriboot loads the image with the firmware's `LoadImage` and starts it with `StartImage`. The kernel, initramfs and command line come from inside the UKI.
+- **UKI, Windows and other EFI applications** (`protocol: efi`): ferriboot loads the image with the firmware's `LoadImage` and starts it with `StartImage`. A UKI brings its own kernel, initramfs and command line.
 
-`ferriboot mkconfig` picks up kernels (`vmlinuz-*`) from the ESP and `/boot`, and UKIs from `EFI/Linux/*.efi` on the ESP. UKIs are listed first.
+`ferriboot mkconfig` builds the menu from:
+
+- UKIs in `EFI/Linux/*.efi` on the ESP (listed first)
+- kernels (`vmlinuz-*`) on the ESP and in `/boot`
+- Windows Boot Manager at `EFI/Microsoft/Boot/bootmgfw.efi` (listed last)
 
 ## Compatibility
 
-| Distribution       | Environment   | Boot | Kernel update hook                     |
+| System             | Environment   | Boot | Kernel update hook                     |
 |--------------------|---------------|------|----------------------------------------|
 | Arch Linux         | Real hardware | ✅   | ✅ pacman hook                          |
 | Arch Linux (UKI)   | Real hardware | ✅   | ⚠️ pacman hook                          |
 | Fedora 44          | QEMU / OVMF   | ✅   | ✅ kernel-install plugin                |
 | Ubuntu             | QEMU / OVMF   | ✅   | ⚠️ `/etc/kernel/postinst.d`             |
 | Debian             | —             | ⚠️   | ⚠️ `/etc/kernel/postinst.d`             |
+| Windows (dual boot)| —             | ⚠️   | —                                      |
 
 ✅ tested · ⚠️ implemented but not yet tested
 
@@ -29,9 +34,11 @@ A UEFI bootloader for Linux written in Rust. It loads the kernel and initramfs f
 
 - x86_64 UEFI systems only
 - Secure Boot is not supported
-- Only the ESP ferriboot is started from is searched; EFI applications on other disks are not reachable
+- Only the ESP ferriboot is started from is searched: Windows and other EFI applications on another disk are not detected
 - Kernels without an initramfs are skipped by `mkconfig`
 - NixOS is not supported (it would need a dedicated NixOS module)
+
+> **Windows with BitLocker:** starting Windows through another bootloader can change TPM measurements, and Windows may ask for the BitLocker recovery key. Make sure you have it before trying.
 
 ## Building
 
@@ -104,9 +111,23 @@ protocol: linux
 kernel: \vmlinuz-linux
 initrd: \initramfs-linux.img
 cmdline: root=UUID=... rw
+
+/Windows Boot Manager
+protocol: efi
+path: \EFI\Microsoft\Boot\bootmgfw.efi
 ```
 
 `default` counts from 1. Manual edits are overwritten the next time `mkconfig` runs.
+
+## Roadmap
+
+- [x] Boot Linux via the x86 boot protocol
+- [x] Unified Kernel Images (UKI) via EFI chainloading
+- [x] Windows Boot Manager entry (not yet tested on real Windows)
+- [ ] Boot log on the ESP and Boot Loader Interface (`systemd-analyze` support)
+- [ ] Persistent settings (`/etc/ferriboot.conf`: timeout, default entry)
+- [ ] Full-boot benchmark (VM start → multi-user.target)
+- [ ] Secure Boot
 
 ## License
 
