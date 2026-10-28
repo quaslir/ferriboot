@@ -84,7 +84,8 @@ fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
         true
     });
     let ukis = uki::find_ukis(&esp);
-    if kernels.is_empty() && ukis.is_empty() {
+    let windows = uki::find_windows(&esp);
+    if kernels.is_empty() && ukis.is_empty() && windows.is_none() {
         die("no kernels or UKIs found in the ESP or /boot");
     }
     let mut planned = Vec::new();
@@ -103,7 +104,7 @@ fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
         Err(e) => die(e.as_str()),
     };
 
-    let config = mkconfig::build_config(&planned, &ukis, &cmdline, &esp);
+    let config = mkconfig::build_config(&planned, &ukis, windows, &cmdline, &esp);
     let text = config.to_string();
     let parse_result = config::parse(&text);
     if let Err(e) = parse_result {

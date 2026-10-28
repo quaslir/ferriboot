@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{self, Path, PathBuf};
 
 use crate::kernels;
 
@@ -37,4 +37,13 @@ pub fn find_ukis(esp: &Path) -> Vec<PathBuf> {
     });
 
     ukis
+}
+
+pub fn find_windows(esp: &Path) -> Option<PathBuf> {
+    let path = esp.join("EFI/Microsoft/Boot/bootmgfw.efi");
+    if !path.is_file() {
+        return None;
+    }
+
+    return Some(path);
 }

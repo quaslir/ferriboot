@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use config::Entry;
+
 use crate::kernels::Kernel;
 
 fn to_uefi_path(esp: &Path, path: &Path) -> Option<String> {
@@ -20,7 +22,13 @@ fn distro_name() -> String {
     "Linux".to_string()
 }
 
-pub fn build_config(kernels: &[Kernel], ukis: &[PathBuf], cmd: &str, esp: &Path) -> config::Config {
+pub fn build_config(
+    kernels: &[Kernel],
+    ukis: &[PathBuf],
+    windows: Option<PathBuf>,
+    cmd: &str,
+    esp: &Path,
+) -> config::Config {
     let distro_name = distro_name();
     let mut entries = Vec::new();
 
@@ -89,6 +97,27 @@ pub fn build_config(kernels: &[Kernel], ukis: &[PathBuf], cmd: &str, esp: &Path)
                 cmdline: Some(cmd.to_string()),
                 path: None,
             });
+        }
+    }
+
+    if let Some(win) = windows {
+        match to_uefi_path(esp, &win) {
+            Some(name) => {
+                entries.push(Entry {
+                    name: "Windows Boot Manager".to_string(),
+                    protocol: config::Protocol::Efi,
+                    kernel: None,
+                    initrd: None,
+                    cmdline: None,
+                    path: Some(name),
+                });
+            }
+            None => {
+                eprintln!(
+                    "ferriboot: warning: skipping {}: not on the ESP",
+                    win.display()
+                );
+            }
         }
     }
 
