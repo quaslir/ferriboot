@@ -3,6 +3,7 @@ use crate::graphics;
 use uefi::CString16;
 use uefi::boot::{self, MemoryType};
 use uefi::table::cfg::ConfigTableEntry;
+#[expect(dead_code)]
 pub struct LinuxImage {
     pub kernel_base: u64,
     pub initrd_addr: u64,

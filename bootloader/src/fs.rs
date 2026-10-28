@@ -1,5 +1,3 @@
-use core::u8;
-
 use uefi::Error;
 use uefi::boot;
 use uefi::data_types::CStr16;
