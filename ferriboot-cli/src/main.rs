@@ -521,4 +521,15 @@ mod tests {
 
         assert_eq!(win_search, false);
     }
+
+    #[test]
+
+    pub fn config_roundtrip() {
+        let esp = PathBuf::from(ESP);
+        let config = build_config(&fake_kernels(), &fake_ukis(), fake_windows(), CMDLINE, &esp);
+        let config_str = config.to_string();
+        let config2 = config::parse(&config_str);
+        assert!(config2.is_ok());
+        assert_eq!(config, config2.unwrap());
+    }
 }
