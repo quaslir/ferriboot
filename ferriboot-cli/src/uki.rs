@@ -1,4 +1,4 @@
-use std::path::{self, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use crate::kernels;
 
@@ -45,5 +45,5 @@ pub fn find_windows(esp: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    return Some(path);
+    Some(path)
 }

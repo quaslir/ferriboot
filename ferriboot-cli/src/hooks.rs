@@ -78,18 +78,11 @@ fn write_file(path: &str, content: &str, mode: u32, dry_run: bool) -> Result<(),
         return Err("cannot determine directory of hook path".to_string());
     };
 
-    fs::create_dir_all(parent)
-        .map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
-    fs::write(path, content)
-        .map_err(|e| format!("cannot write {} : {}", path.display(), e))?;
+    fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
+    fs::write(path, content).map_err(|e| format!("cannot write {} : {}", path.display(), e))?;
 
-    fs::set_permissions(path, Permissions::from_mode(mode)).map_err(|e| {
-        format!(
-            "cannot set permissions on {}: {}",
-            path.display(),
-            e
-        )
-    })?;
+    fs::set_permissions(path, Permissions::from_mode(mode))
+        .map_err(|e| format!("cannot set permissions on {}: {}", path.display(), e))?;
     eprintln!("ferriboot: installed {}", path.display());
     Ok(())
 }

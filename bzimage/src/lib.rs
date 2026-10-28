@@ -7,7 +7,6 @@ pub mod screen_info;
 pub mod setup;
 mod utils;
 use utils::*;
-use {crate::e820::*, crate::setup::*};
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     TooShort,
@@ -40,11 +39,11 @@ impl SetupHeader {
 }
 
 #[cfg(test)]
-
 mod tests {
     use crate::{
         ParseError::{self, BadBootFlag},
-        fill_boot_params, parse_setup_header, read_u16, read_u32, read_u64,
+        read_u16, read_u32, read_u64,
+        setup::{fill_boot_params, parse_setup_header},
     };
 
     #[test]
@@ -55,11 +54,11 @@ mod tests {
         assert!(result.is_ok());
         let header = result.unwrap();
 
-        assert_eq!(header.boot_flag, crate::EXPECTED_BOOT_FLAG);
-        assert_eq!(header.header, crate::EXPECTED_MAGIC);
-        assert!(header.version >= crate::SUPPORTED_VERSION);
+        assert_eq!(header.boot_flag, crate::setup::EXPECTED_BOOT_FLAG);
+        assert_eq!(header.header, crate::setup::EXPECTED_MAGIC);
+        assert!(header.version >= crate::setup::SUPPORTED_VERSION);
         assert_eq!(header.version, 0x020F);
-        assert_ne!(header.xloadflags & crate::XLF_KERNEL_64, 0);
+        assert_ne!(header.xloadflags & crate::setup::XLF_KERNEL_64, 0);
         assert_ne!(header.setup_sects, 0);
         assert!(header.kernel_offset() < buffer.len());
         assert_ne!(header.init_size, 0);
@@ -75,7 +74,7 @@ mod tests {
     #[test]
     pub fn bad_boot_flag() {
         let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
-        buffer[crate::BOOT_FLAG_OFFSET] = 0;
+        buffer[crate::setup::BOOT_FLAG_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::BadBootFlag)));
     }
@@ -84,7 +83,7 @@ mod tests {
 
     pub fn bad_magic() {
         let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
-        buffer[crate::HEADER_OFFSET] = 0;
+        buffer[crate::setup::HEADER_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::BadMagic)));
     }
@@ -101,14 +100,14 @@ mod tests {
     #[test]
     pub fn unsupported_version() {
         let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
-        buffer[crate::VERSION_OFFSET] = 0;
+        buffer[crate::setup::VERSION_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::UnsupportedVersion)));
     }
     #[test]
     pub fn no64bit_entry() {
         let mut buffer = include_bytes!("../tests/vmlinuz").to_vec();
-        buffer[crate::XLOADFLAGS_OFFSET] = 0;
+        buffer[crate::setup::XLOADFLAGS_OFFSET] = 0;
         let result = parse_setup_header(&buffer);
         assert!(matches!(result, Err(ParseError::No64BitEntry)));
     }
@@ -156,6 +155,6 @@ mod tests {
         );
 
         assert_eq!(result, Err(BadBootFlag));
-        assert_eq!(arr.iter().all(|v| v == &0u8), true);
+        assert!(arr.iter().all(|v| v == &0u8));
     }
 }

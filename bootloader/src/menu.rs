@@ -54,10 +54,9 @@ pub fn select_entry(config: &config::Config) -> usize {
                         }
                         redraw = true;
                     }
-                    Key::Printable(c)
-                        if char::from(c) == '\r' => {
-                            return selected;
-                        }
+                    Key::Printable(c) if char::from(c) == '\r' => {
+                        return selected;
+                    }
                     _ => {}
                 }
             }

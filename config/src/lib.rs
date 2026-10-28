@@ -321,7 +321,7 @@ pub fn parse(text: &str) -> Result<Config, ConfigError> {
 #[cfg(test)]
 
 mod tests {
-    use core::{ffi::FromBytesWithNulError::NotNulTerminated, ptr::eq};
+    
 
     use alloc::format;
 
