@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build bootloader (UEFI)
+        run: cargo build --release -p bootloader --target x86_64-unknown-uefi
+
+      - name: Build CLI
+        run: cargo build --release -p ferriboot-cli --target x86_64-unknown-linux-gnu
+
+      - name: Test
+        run: cargo test --target x86_64-unknown-linux-gnu -p bzimage -p config -p ferriboot-cli
+
+      - name: Clippy (host crates)
+        run: cargo clippy --target x86_64-unknown-linux-gnu -p bzimage -p config -p ferriboot-cli -- -D warnings
+
+      - name: Clippy (bootloader)
+        run: cargo clippy --target x86_64-unknown-uefi -p bootloader -- -D warnings
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ferriboot.efi
+          path: target/x86_64-unknown-uefi/release/bootloader.efi
