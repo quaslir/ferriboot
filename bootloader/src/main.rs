@@ -12,12 +12,14 @@ use uefi::{
     mem::memory_map::MemoryMap,
     prelude::*,
 };
+mod bli;
 mod chainload;
 mod conf;
 mod fs;
 mod linux;
 mod memory;
 mod menu;
+mod timer;
 extern crate alloc;
 
 fn fail(e: uefi::Error) -> Status {
@@ -39,7 +41,7 @@ fn hlt() -> ! {
     }
 }
 
-fn boot_linux_entry(entry: &config::Entry) -> Status {
+fn boot_linux_entry(entry: &config::Entry, init_tsc: u64) -> Status {
     let load_linux = linux::load_linux(entry);
 
     let image = match load_linux {
@@ -53,6 +55,7 @@ fn boot_linux_entry(entry: &config::Entry) -> Status {
         None => return fail(Error::from(uefi::Status::NOT_FOUND)),
     };
 
+    bli::set_loader_times(init_tsc);
     unsafe {
         let mut map = exit_boot_services(Some(MemoryType::LOADER_DATA));
         let mut entries = [bzimage::e820::E820Entry::default(); bzimage::e820::E820_MAX_ENTRIES];
@@ -83,6 +86,7 @@ fn boot_linux_entry(entry: &config::Entry) -> Status {
 
 #[entry]
 fn main() -> Status {
+    let init_tsc = timer::read_tsc();
     if uefi::helpers::init().is_err() {
         return Status::ABORTED;
     }
@@ -96,14 +100,18 @@ fn main() -> Status {
     let index = menu::select_entry(&conf);
     system::with_stdout(|out| out.set_color(Color::LightGray, Color::Black)).ok();
     system::with_stdout(|out| out.clear()).ok();
-
     let entry = &conf.entries[index];
+    bli::set_loader_info(&entry.name);
+
     uefi::println!("Loading {}", entry.name);
     match entry.protocol {
-        config::Protocol::Efi => match chainload::start_efi(entry) {
-            Ok(()) => Status::SUCCESS,
-            Err(e) => fail(e),
-        },
-        config::Protocol::Linux => boot_linux_entry(entry),
+        config::Protocol::Efi => {
+            bli::set_loader_times(init_tsc);
+            match chainload::start_efi(entry) {
+                Ok(()) => Status::SUCCESS,
+                Err(e) => fail(e),
+            }
+        }
+        config::Protocol::Linux => boot_linux_entry(entry, init_tsc),
     }
 }

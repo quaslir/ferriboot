@@ -21,3 +21,5 @@ bzimage/tests/vmlinuz
 /bench/vmlinuz-linux
 /bench/initramfs-linux.img
 /bench/logs
+Shell.efi
+ovmf-vars.fd
