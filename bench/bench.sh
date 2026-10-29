@@ -7,11 +7,21 @@
 #   RUNS=30 ./bench/bench.sh                           more runs
 #   LOADERS="ferriboot grub" ./bench/bench.sh          only some loaders
 #   SHOW=1 LOADERS=ferriboot RUNS=1 ./bench/bench.sh   with a QEMU window
+#
+# Factors, one at a time (to see which loader each one slows down):
+#   TPM=1 ./bench/bench.sh                             software TPM 2.0 (needs swtpm)
+#   IOPS=2000 ./bench/bench.sh                         slow disk: limit disk I/O operations per second
+#   TPM=1 GRUB_TPM=1 LOADERS=grub ./bench/bench.sh     GRUB with its own tpm module
+#
+# Check that the firmware saw the TPM:  grep -i tpm bench/logs/<loader>.log
 set -euo pipefail
 
 RUNS=${RUNS:-15}
 LOADERS=${LOADERS:-"ferriboot systemd-boot limine grub"}
 SHOW=${SHOW:-0}
+TPM=${TPM:-0}
+IOPS=${IOPS:-0}
+GRUB_TPM=${GRUB_TPM:-0}
 HERE=$(cd "$(dirname "$0")" && pwd)
 FERRIBOOT_EFI=${FERRIBOOT_EFI:-$HERE/../target/x86_64-unknown-uefi/release/bootloader.efi}
 KERNEL=$HERE/vmlinuz-linux
@@ -20,19 +30,26 @@ LOGS=$HERE/logs
 OVMF_CODE=/usr/share/edk2/x64/OVMF_CODE.4m.fd
 OVMF_VARS=/usr/share/edk2/x64/OVMF_VARS.4m.fd
 MNT=/mnt/ferriboot-bench
-# earlyprintk + ignore_loglevel: the kernel writes to the serial port as early
-# as possible and nothing is filtered out.
-# rdinit/root/panic: the kernel panics right after unpacking the initramfs,
-# and QEMU exits because of -no-reboot, so every run takes a few seconds.
 CMDLINE="earlyprintk=serial,ttyS0,115200 console=ttyS0 ignore_loglevel rdinit=/nonexistent root=/dev/null panic=-1"
 # The finish line: the first kernel log line with a [ seconds.micro ] timestamp.
 MARKER='\[ *[0-9]+\.[0-9]+\]'
 
-for f in "$FERRIBOOT_EFI" "$KERNEL" "$INITRD" "$OVMF_CODE" "$OVMF_VARS" \
-         /usr/lib/systemd/boot/efi/systemd-bootx64.efi /usr/share/limine/BOOTX64.EFI; do
+# uses LOADER: true if the loader was selected in $LOADERS
+uses() {
+    [[ " $LOADERS " == *" $1 "* ]]
+}
+
+# Only check what the selected loaders and options need.
+files=("$FERRIBOOT_EFI" "$KERNEL" "$INITRD" "$OVMF_CODE" "$OVMF_VARS")
+cmds=(qemu-system-x86_64 ts sfdisk mkfs.fat losetup)
+if uses systemd-boot; then files+=(/usr/lib/systemd/boot/efi/systemd-bootx64.efi); fi
+if uses limine; then files+=(/usr/share/limine/BOOTX64.EFI); fi
+if uses grub; then cmds+=(grub-mkstandalone); fi
+if [[ $TPM == 1 ]]; then cmds+=(swtpm); fi
+for f in "${files[@]}"; do
     [[ -r $f ]] || { echo "missing: $f" >&2; exit 1; }
 done
-for c in qemu-system-x86_64 ts sfdisk mkfs.fat losetup grub-mkstandalone; do
+for c in "${cmds[@]}"; do
     command -v "$c" > /dev/null || { echo "missing command: $c" >&2; exit 1; }
 done
 
@@ -66,6 +83,7 @@ cmdline: $CMDLINE
 EOF
 
 # --- systemd-boot ---
+if uses systemd-boot; then
 cp /usr/lib/systemd/boot/efi/systemd-bootx64.efi "$WORK/systemd-boot/EFI/BOOT/BOOTX64.EFI"
 mkdir -p "$WORK/systemd-boot/loader/entries"
 printf 'timeout 0\ndefault arch.conf\n' > "$WORK/systemd-boot/loader/loader.conf"
@@ -75,8 +93,10 @@ linux /vmlinuz-linux
 initrd /initramfs-linux.img
 options $CMDLINE
 EOF
+fi
 
 # --- Limine ---
+if uses limine; then
 cp /usr/share/limine/BOOTX64.EFI "$WORK/limine/EFI/BOOT/BOOTX64.EFI"
 cat > "$WORK/limine/limine.conf" <<EOF
 timeout: 0
@@ -88,8 +108,10 @@ timeout: 0
     cmdline: $CMDLINE
 EOF
 cp "$WORK/limine/limine.conf" "$WORK/limine/EFI/BOOT/limine.conf"
+fi
 
 # --- GRUB (standalone image with the config embedded) ---
+if uses grub; then
 cat > "$WORK/grub.cfg" <<EOF
 insmod part_gpt
 insmod fat
@@ -101,8 +123,13 @@ menuentry "Arch Linux" {
     initrd /initramfs-linux.img
 }
 EOF
-grub-mkstandalone -O x86_64-efi --modules="part_gpt fat" \
+GRUB_MODULES="part_gpt fat"
+if [[ $GRUB_TPM == 1 ]]; then
+    GRUB_MODULES="$GRUB_MODULES tpm"
+fi
+grub-mkstandalone -O x86_64-efi --modules="$GRUB_MODULES" \
     -o "$WORK/grub/EFI/BOOT/BOOTX64.EFI" "boot/grub/grub.cfg=$WORK/grub.cfg"
+fi
 
 # make_disk NAME: GPT disk with one 500 MiB FAT32 ESP holding $WORK/NAME + kernel + initrd
 make_disk() {
@@ -129,15 +156,28 @@ measure() {
         display=()
     fi
     cp "$OVMF_VARS" "$WORK/vars.fd"
+    local tpm=() drive="file=$img,format=raw,if=virtio"
+    if [[ $TPM == 1 ]]; then
+        rm -rf "$WORK/tpm" && mkdir -p "$WORK/tpm"
+        swtpm socket --tpm2 --tpmstate dir="$WORK/tpm" \
+            --ctrl type=unixio,path="$WORK/tpm/sock" --terminate --daemon
+        while [[ ! -S $WORK/tpm/sock ]]; do sleep 0.05; done
+        tpm=(-chardev socket,id=chrtpm,path="$WORK/tpm/sock"
+             -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0)
+    fi
+    if [[ $IOPS != 0 ]]; then
+        drive="$drive,throttling.iops-total=$IOPS"
+    fi
     timeout 60 qemu-system-x86_64 -enable-kvm -cpu host -m 2G -smp 2 \
         -no-reboot "${display[@]}" -monitor none \
         -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,file="$WORK/vars.fd" \
-        -drive file="$img",format=raw,if=virtio \
+        -drive "$drive" "${tpm[@]}" \
         -serial stdio < /dev/null 2>&1 | ts -s '%.s' > "$log" || true
     grep -m1 -E "$MARKER" "$log" | cut -d' ' -f1 || true
 }
 
+printf 'TPM=%s IOPS=%s GRUB_TPM=%s\n' "$TPM" "$IOPS" "$GRUB_TPM"
 printf '%-14s %8s %8s %8s  (seconds, %d runs)\n' loader median min max "$RUNS"
 for name in $LOADERS; do
     make_disk "$name"
