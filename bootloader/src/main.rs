@@ -19,6 +19,7 @@ mod fs;
 mod linux;
 mod memory;
 mod menu;
+mod timer;
 extern crate alloc;
 
 fn fail(e: uefi::Error) -> Status {
@@ -87,7 +88,9 @@ fn main() -> Status {
     if uefi::helpers::init().is_err() {
         return Status::ABORTED;
     }
-
+    uefi::println!("{}", timer::read_tsc());
+    uefi::println!("{}", timer::read_tsc());
+    uefi::println!("{}", timer::tsc_freq().unwrap());
     let load_config = conf::load_config();
     let conf = match load_config {
         Ok(c) => c,
