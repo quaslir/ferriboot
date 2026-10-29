@@ -10,12 +10,14 @@ A UEFI bootloader for Linux written in Rust. It loads the kernel and initramfs f
 
 - **Linux kernel + initramfs** (`protocol: linux`): ferriboot parses the bzImage setup header, loads the kernel and initramfs, builds `boot_params` (e820 memory map, framebuffer, EFI system table, ACPI RSDP) and jumps into the kernel after `ExitBootServices`.
 - **UKI, Windows and other EFI applications** (`protocol: efi`): ferriboot loads the image with the firmware's `LoadImage` and starts it with `StartImage`. A UKI brings its own kernel, initramfs and command line.
+- **Boot Loader Interface:** ferriboot sets `LoaderInfo`, `LoaderEntrySelected` and the `LoaderTime*` variables, so `bootctl status` shows it and `systemd-analyze` reports the loader time.
 
 `ferriboot mkconfig` builds the menu from:
 
 - UKIs in `EFI/Linux/*.efi` on the ESP (listed first)
 - kernels (`vmlinuz-*`) on the ESP and in `/boot`
 - Windows Boot Manager at `EFI/Microsoft/Boot/bootmgfw.efi` (listed last)
+
 
 ## Compatibility
 
@@ -37,8 +39,48 @@ A UEFI bootloader for Linux written in Rust. It loads the kernel and initramfs f
 - Only the ESP ferriboot is started from is searched: Windows and other EFI applications on another disk are not detected
 - Kernels without an initramfs are skipped by `mkconfig`
 - NixOS is not supported (it would need a dedicated NixOS module)
+- No measured boot: the kernel, initramfs and command line are not measured into the TPM, so TPM-sealed secrets bound to those PCRs (for example LUKS unlock with `systemd-cryptenroll --tpm2-pcrs=9`) will not work
+- The TPM event log is not passed to the kernel (normally the EFI stub does this), so `/sys/kernel/security/tpm0/binary_bios_measurements` may be missing
 
 > **Windows with BitLocker:** starting Windows through another bootloader can change TPM measurements, and Windows may ask for the BitLocker recovery key. Make sure you have it before trying.
+
+## Benchmark
+
+### Real hardware
+
+Laptop (Intel i5-9300H, NVMe, TPM 2.0), Arch Linux, kernel 7.2, ~100 MB initramfs.
+Same kernel, initramfs and command line for every loader, menu timeout 0, 10 boots each.
+Loader time is the `(loader)` value from `systemd-analyze` (median):
+
+| Loader       | Loader time |
+|--------------|-------------|
+| ferriboot    | 294 ms      |
+| systemd-boot | 1.44 s      |
+| GRUB         | 1.63 s      |
+
+Each loader reports its own start and handoff times through the
+[Boot Loader Interface](https://systemd.io/BOOT_LOADER_INTERFACE/), so the
+measurement points are similar but not identical.
+
+### Why the gap: QEMU, one factor at a time
+
+`bench/bench.sh`, QEMU/KVM + OVMF, time from VM start to the first kernel log line (median of 10):
+
+| Loader       | Base   | + software TPM | Slow disk (2000 IOPS) |
+|--------------|--------|----------------|-----------------------|
+| ferriboot    | 1.43 s | 2.68 s         | 1.45 s                |
+| systemd-boot | 1.56 s | 4.07 s         | 1.58 s                |
+| GRUB         | 1.59 s | 4.40 s         | 3.10 s                |
+
+- Without a TPM, all three are within ~10%.
+- A TPM slows every loader down (firmware work), but systemd-boot and GRUB lose
+  an extra ~1.3–1.6 s. This is consistent with measured boot: they have the
+  kernel and initramfs hashed into the TPM, and ferriboot does not.
+- A slow disk only affects GRUB, which reads FAT with its own driver.
+
+**ferriboot is faster mainly because it does less.** It skips measured boot,
+which costs over a second on hardware with a TPM. See Limitations for what you
+give up.
 
 ## Building
 
@@ -124,7 +166,7 @@ path: \EFI\Microsoft\Boot\bootmgfw.efi
 - [x] Boot Linux via the x86 boot protocol
 - [x] Unified Kernel Images (UKI) via EFI chainloading
 - [x] Windows Boot Manager entry (not yet tested on real Windows)
-- [ ] Boot log on the ESP and Boot Loader Interface (`systemd-analyze` support)
+- [x] Boot log on the ESP and Boot Loader Interface (`systemd-analyze` support)
 - [ ] Persistent settings (`/etc/ferriboot.conf`: timeout, default entry)
 - [ ] Full-boot benchmark (VM start → multi-user.target)
 - [ ] Secure Boot
