@@ -41,7 +41,7 @@ fn hlt() -> ! {
     }
 }
 
-fn boot_linux_entry(entry: &config::Entry) -> Status {
+fn boot_linux_entry(entry: &config::Entry, init_tsc: u64) -> Status {
     let load_linux = linux::load_linux(entry);
 
     let image = match load_linux {
@@ -55,6 +55,7 @@ fn boot_linux_entry(entry: &config::Entry) -> Status {
         None => return fail(Error::from(uefi::Status::NOT_FOUND)),
     };
 
+    bli::set_loader_times(init_tsc);
     unsafe {
         let mut map = exit_boot_services(Some(MemoryType::LOADER_DATA));
         let mut entries = [bzimage::e820::E820Entry::default(); bzimage::e820::E820_MAX_ENTRIES];
@@ -85,12 +86,11 @@ fn boot_linux_entry(entry: &config::Entry) -> Status {
 
 #[entry]
 fn main() -> Status {
+    let init_tsc = timer::read_tsc();
     if uefi::helpers::init().is_err() {
         return Status::ABORTED;
     }
-    uefi::println!("{}", timer::read_tsc());
-    uefi::println!("{}", timer::read_tsc());
-    uefi::println!("{}", timer::tsc_freq().unwrap());
+
     let load_config = conf::load_config();
     let conf = match load_config {
         Ok(c) => c,
@@ -105,10 +105,13 @@ fn main() -> Status {
 
     uefi::println!("Loading {}", entry.name);
     match entry.protocol {
-        config::Protocol::Efi => match chainload::start_efi(entry) {
-            Ok(()) => Status::SUCCESS,
-            Err(e) => fail(e),
-        },
-        config::Protocol::Linux => boot_linux_entry(entry),
+        config::Protocol::Efi => {
+            bli::set_loader_times(init_tsc);
+            match chainload::start_efi(entry) {
+                Ok(()) => Status::SUCCESS,
+                Err(e) => fail(e),
+            }
+        }
+        config::Protocol::Linux => boot_linux_entry(entry, init_tsc),
     }
 }
