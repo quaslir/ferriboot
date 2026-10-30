@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::bootentry::LOADER_PATH;
 use crate::esp::find_esp;
+use clap::{Parser, Subcommand};
 mod bootentry;
 mod cmdline;
 mod esp;
@@ -12,26 +13,45 @@ mod install;
 mod kernels;
 mod mkconfig;
 mod uki;
-const USAGE: &str = "usage: ferriboot <command> [options]
+/// UEFI bootloader for Linux: install and configure ferriboot
+#[derive(Parser)]
+#[command(
+    version,
+    about,
+    after_help = "install, mkconfig and uninstall need root: sudo ferriboot <command>"
+)]
+struct Cli {
+    /// show what would be done without changing anything
+    #[arg(long, global = true)]
+    dry_run: bool,
+    #[command(subcommand)]
+    command: Command,
+}
 
-commands:
-  install     install the bootloader to the ESP, generate the config,
-              register a firmware boot entry, copy ferriboot to
-              /usr/local/bin and install the kernel update hook
-  mkconfig    find kernels, copy them to the ESP if needed and write
-              EFI/ferriboot/ferriboot.conf
-  uninstall   remove the boot entry, EFI/ferriboot on the ESP, the
-              kernel update hook and /usr/local/bin/ferriboot
-  help        show this help
+#[derive(Subcommand)]
+enum Command {
+    /// install the bootloader to the ESP, generate the config, register a
+    /// firmware boot entry, copy ferriboot to /usr/local/bin and install
+    /// the kernel update hook
+    Install {
+        /// bootloader image to install
+        #[arg(long, default_value = "/usr/lib/ferriboot/ferriboot.efi")]
+        #[arg(value_name = "PATH")]
+        efi: PathBuf,
+    },
 
-options:
-  --dry-run   show what would be done without changing anything
-  --efi PATH  (install) bootloader image to install
-              [default: /usr/lib/ferriboot/ferriboot.efi]
-  --if-installed  (mkconfig) do nothing unless ferriboot is installed on the ESP
+    /// find kernels, copy them to the ESP if needed and write
+    /// EFI/ferriboot/ferriboot.conf
+    Mkconfig {
+        /// do nothing unless ferriboot is installed on the ESP
+        #[arg(long)]
+        if_installed: bool,
+    },
 
-install, mkconfig and uninstall need root: sudo ferriboot <command>
-";
+    /// remove the boot entry, EFI/ferriboot on the ESP, the kernel update
+    /// hook and /usr/local/bin/ferriboot
+    Uninstall,
+}
 
 fn installed_by_package(exe: &Path) -> bool {
     let Ok(res) = fs::canonicalize(exe) else {
@@ -181,7 +201,7 @@ fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
     }
 }
 
-fn cmd_install(args: &[String], dry_run: bool) {
+fn cmd_install(path: &Path, dry_run: bool) {
     if !dry_run {
         require_root();
     }
@@ -197,22 +217,6 @@ fn cmd_install(args: &[String], dry_run: bool) {
         eprintln!(
             "ferriboot: installed by a package, binary and kernel hook are managed by pacman"
         );
-    }
-
-    let efi = args.iter().position(|s| s == "--efi");
-
-    let path_str = match efi {
-        Some(i) => {
-            let Some(p) = args.get(i + 1) else {
-                die("--efi needs a path")
-            };
-            p.as_str()
-        }
-        None => "/usr/lib/ferriboot/ferriboot.efi",
-    };
-    let path = PathBuf::from(path_str);
-    if !path.is_file() {
-        die(format!("{} not found", path.display()).as_str());
     }
 
     let Some(esp) = esp::find_esp() else {
@@ -233,7 +237,7 @@ fn cmd_install(args: &[String], dry_run: bool) {
         if let Err(e) = create_dir_all(dir) {
             die(&format!("cannot create {}: {}", dir.display(), e));
         };
-        if let Err(e) = fs::copy(&path, &dest) {
+        if let Err(e) = fs::copy(path, &dest) {
             die(&format!(
                 "cannot copy {} -> {}: {}",
                 path.display(),
@@ -307,10 +311,6 @@ fn cmd_install(args: &[String], dry_run: bool) {
     }
 }
 
-fn cmd_help() {
-    print!("{}", USAGE);
-}
-
 fn cmd_uninstall(dry_run: bool) {
     if !dry_run {
         require_root();
@@ -376,33 +376,12 @@ fn cmd_uninstall(dry_run: bool) {
 }
 
 fn main() {
-    let it = std::env::args();
-    let args = it.collect::<Vec<String>>();
-
-    let first = args.get(1).map(|s| s.as_str());
-    let dry_run = args.iter().any(|e| e == "--dry-run");
-    let if_installed = args.iter().any(|s| s == "--if-installed");
-    match first {
-        Some("mkconfig") => {
-            cmd_mkconfig(dry_run, if_installed);
-        }
-        Some("install") => {
-            cmd_install(&args, dry_run);
-        }
-        Some("uninstall") => {
-            cmd_uninstall(dry_run);
-        }
-        Some("help") | Some("--help") | Some("-h") => {
-            cmd_help();
-        }
-        _ => {
-            if let Some(cmd) = first {
-                eprintln!("ferriboot: unknown command '{}'", cmd);
-            }
-            eprint!("{}", USAGE);
-            std::process::exit(1);
-        }
-    };
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Install { efi } => cmd_install(&efi, cli.dry_run),
+        Command::Mkconfig { if_installed } => cmd_mkconfig(cli.dry_run, if_installed),
+        Command::Uninstall => cmd_uninstall(cli.dry_run),
+    }
 }
 
 #[cfg(test)]
