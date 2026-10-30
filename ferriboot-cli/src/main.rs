@@ -12,6 +12,7 @@ mod hooks;
 mod install;
 mod kernels;
 mod mkconfig;
+mod status;
 mod uki;
 /// UEFI bootloader for Linux: install and configure ferriboot
 #[derive(Parser)]
@@ -51,6 +52,9 @@ enum Command {
     /// remove the boot entry, EFI/ferriboot on the ESP, the kernel update
     /// hook and /usr/local/bin/ferriboot
     Uninstall,
+
+    /// show whether ferriboot is installed and how the last boot went;
+    Status,
 }
 
 fn installed_by_package(exe: &Path) -> bool {
@@ -381,6 +385,7 @@ fn main() {
         Command::Install { efi } => cmd_install(&efi, cli.dry_run),
         Command::Mkconfig { if_installed } => cmd_mkconfig(cli.dry_run, if_installed),
         Command::Uninstall => cmd_uninstall(cli.dry_run),
+        Command::Status => status::cmd_status(),
     }
 }
 

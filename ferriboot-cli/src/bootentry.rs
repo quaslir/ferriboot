@@ -103,3 +103,18 @@ pub fn delete_entry(num: &str) -> Result<(), String> {
     run("efibootmgr", &["-b", num, "-B"])?;
     Ok(())
 }
+
+pub fn boot_order() -> Result<Vec<String>, String> {
+    let result = run("efibootmgr", &[])?;
+
+    for line in result.lines() {
+        let Some(target) = line.strip_prefix("BootOrder:") else {
+            continue;
+        };
+
+        let order = target.trim().split(',').map(|s| s.to_string());
+        return Ok(order.collect());
+    }
+
+    Ok(Vec::new())
+}
