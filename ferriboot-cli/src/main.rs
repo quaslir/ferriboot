@@ -1,4 +1,4 @@
-use std::fs::{self, create_dir_all};
+use std::fs::{self};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +11,7 @@ mod cmd_install;
 mod cmd_mkconfig;
 mod cmd_uninstall;
 mod cmdline;
+mod efivars;
 mod esp;
 mod hooks;
 mod install;

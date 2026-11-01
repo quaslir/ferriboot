@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::esp;
+use crate::{efivars, esp};
 pub fn cmd_check() {
     let Some(esp) = esp::find_esp() else {
         eprintln!("ferriboot: error: ESP not found (checked /boot, /efi, /boot/efi)");
@@ -29,6 +29,15 @@ pub fn cmd_check() {
             std::process::exit(1);
         }
     };
+
+    let efi_var_result = efivars::read_bytes("SecureBoot", efivars::GLOBAL_GUID);
+    if let Some(bytes) = efi_var_result
+        && bytes.first() == Some(&1)
+    {
+        eprintln!(
+            "ferriboot: warning: Secure Boot is enabled, the firmware will refuse to start ferriboot (it is not signed)"
+        );
+    }
 
     let mut errors = 0;
     for entry in &conf.entries {

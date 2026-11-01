@@ -1,8 +1,8 @@
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use {
-    crate::LOADER_PATH, crate::bootentry, crate::cmd_mkconfig, crate::die, crate::hooks,
-    crate::installed_by_package, crate::require_root,
+    crate::LOADER_PATH, crate::bootentry, crate::cmd_mkconfig, crate::die, crate::esp,
+    crate::hooks, crate::installed_by_package, crate::require_root,
 };
 
 pub fn cmd_install(path: &Path, dry_run: bool) {
