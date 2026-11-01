@@ -17,6 +17,7 @@ mod hooks;
 mod install;
 mod kernels;
 mod mkconfig;
+mod settings;
 mod status;
 mod uki;
 /// UEFI bootloader for Linux: install and configure ferriboot
