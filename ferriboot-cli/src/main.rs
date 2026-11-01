@@ -6,6 +6,7 @@ use crate::bootentry::LOADER_PATH;
 use crate::esp::find_esp;
 use clap::{Parser, Subcommand};
 mod bootentry;
+mod check;
 mod cmd_install;
 mod cmd_mkconfig;
 mod cmd_uninstall;
@@ -58,6 +59,7 @@ enum Command {
 
     /// show whether ferriboot is installed and how the last boot went;
     Status,
+    Check,
 }
 
 fn installed_by_package(exe: &Path) -> bool {
@@ -90,6 +92,7 @@ fn main() {
         Command::Mkconfig { if_installed } => cmd_mkconfig::cmd_mkconfig(cli.dry_run, if_installed),
         Command::Uninstall => cmd_uninstall::cmd_uninstall(cli.dry_run),
         Command::Status => status::cmd_status(),
+        Command::Check => check::cmd_check(),
     }
 }
 
