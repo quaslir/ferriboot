@@ -1,3 +1,7 @@
+use std::{fs, io::ErrorKind, path::PathBuf};
+
+pub const PATH: &str = "/etc/ferriboot.conf";
+
 #[derive(Debug, Default, PartialEq)]
 pub struct Settings {
     pub timeout: Option<u32>,
@@ -34,10 +38,43 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     Ok(settings)
 }
 
+pub fn apply(config: &mut config::Config, settings: &Settings) -> Option<String> {
+    if let Some(timeout) = settings.timeout {
+        config.timeout = timeout;
+    }
+    if let Some(default) = &settings.default {
+        let Some(i) = config.entries.iter().position(|s| &s.name == default) else {
+            return Some(format!(
+                "default entry '{}' not found, using the first entry",
+                default
+            ));
+        };
+
+        config.default = i;
+    }
+
+    None
+}
+
+pub fn load() -> Result<Settings, String> {
+    let read_res = fs::read_to_string(PathBuf::from(PATH));
+
+    match read_res {
+        Ok(text) => parse(&text).map_err(|e| format!("{}: {}", PATH, e)),
+        Err(e) => match e.kind() {
+            ErrorKind::NotFound => Ok(Settings::default()),
+            _ => Err(format!("{}: {}", PATH, e)),
+        },
+    }
+}
+
 #[cfg(test)]
 
 mod tests {
-    use crate::settings::parse;
+    use crate::settings::{Settings, apply, parse};
+    use config::Config;
+    use config::Entry;
+    use config::Protocol;
 
     #[test]
 
@@ -101,5 +138,70 @@ mod tests {
         let str: &str = "timeout 5";
         let result = parse(str);
         assert!(result.is_err());
+    }
+
+    fn fake_config() -> Config {
+        Config {
+            timeout: 3,
+            default: 0,
+            entries: vec![
+                Entry {
+                    name: "Arch Linux (linux)".to_string(),
+                    protocol: Protocol::Linux,
+                    kernel: Some(r"\vmlinuz-linux".to_string()),
+                    initrd: Some(r"\initramfs-linux.img".to_string()),
+                    cmdline: None,
+                    path: None,
+                },
+                Entry {
+                    name: "Arch Linux (linux-lts)".to_string(),
+                    protocol: Protocol::Linux,
+                    kernel: Some(r"\vmlinuz-linux-lts".to_string()),
+                    initrd: Some(r"\initramfs-linux-lts.img".to_string()),
+                    cmdline: None,
+                    path: None,
+                },
+            ],
+        }
+    }
+    #[test]
+
+    pub fn settings_default() {
+        let mut config = fake_config();
+        assert_eq!(apply(&mut config, &Settings::default()), None);
+    }
+
+    #[test]
+
+    pub fn settings_set_timeout() {
+        let mut config = fake_config();
+        let settings = Settings {
+            timeout: Some(10),
+            default: None,
+        };
+        assert_eq!(apply(&mut config, &settings), None);
+        assert_eq!(config.timeout, 10);
+    }
+
+    #[test]
+
+    pub fn settings_set_default() {
+        let mut config = fake_config();
+        let settings = Settings {
+            timeout: None,
+            default: Some("Arch Linux (linux-lts)".to_string()),
+        };
+        assert_eq!(apply(&mut config, &settings), None);
+        assert_eq!(config.default, 1);
+    }
+
+    #[test]
+    pub fn settings_invalid_name() {
+        let mut config = fake_config();
+        let settings = Settings {
+            timeout: None,
+            default: Some("not exists".to_string()),
+        };
+        assert!(apply(&mut config, &settings).is_some());
     }
 }

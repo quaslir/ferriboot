@@ -1,4 +1,6 @@
+use crate::settings;
 use std::fs::{self, create_dir_all};
+
 use {
     crate::cmdline, crate::die, crate::esp, crate::install, crate::kernels, crate::mkconfig,
     crate::uki,
@@ -52,7 +54,15 @@ pub fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
         Err(e) => die(e.as_str()),
     };
 
-    let config = mkconfig::build_config(&planned, &ukis, windows, &cmdline, &esp);
+    let mut config = mkconfig::build_config(&planned, &ukis, windows, &cmdline, &esp);
+    match settings::load() {
+        Err(e) => eprintln!("ferriboot: warning: {}, using defaults", e),
+        Ok(s) => {
+            if let Some(w) = settings::apply(&mut config, &s) {
+                eprintln!("ferriboot: warning: {}", w)
+            }
+        }
+    }
     let text = config.to_string();
     let parse_result = config::parse(&text);
     if let Err(e) = parse_result {
