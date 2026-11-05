@@ -9,6 +9,7 @@ mod cmd_install;
 mod cmd_mkconfig;
 mod cmd_set;
 mod cmd_uninstall;
+mod cmd_update;
 mod cmdline;
 mod efivars;
 mod esp;
@@ -74,6 +75,18 @@ enum Command {
         /// new value
         value: String,
     },
+    ///copy a newer ferriboot.efi to the ESP
+    Update {
+        #[arg(
+            long,
+            default_value = "/usr/lib/ferriboot/ferriboot.efi",
+            value_name = "PATH"
+        )]
+        efi: PathBuf,
+        ///: new bootloader image;
+        ///: do nothing unless ferriboot is installed on the ESP;
+        if_installed: bool,
+    },
 }
 
 fn installed_by_package(exe: &Path) -> bool {
@@ -109,6 +122,9 @@ fn main() {
         Command::Check => check::cmd_check(),
         Command::Set { key, value } => {
             cmd_set::cmd_set(key, &value, cli.dry_run);
+        }
+        Command::Update { efi, if_installed } => {
+            cmd_update::cmd_update(&efi, if_installed, cli.dry_run)
         }
     }
 }
