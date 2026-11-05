@@ -1,8 +1,8 @@
 use std::fs::{self};
 use std::path::Path;
 use {
-    crate::LOADER_PATH, crate::bootentry, crate::die, crate::find_esp, crate::hooks,
-    crate::require_root,
+    crate::bootentry, crate::bootentry::LOADER_PATH, crate::die, crate::esp::find_esp,
+    crate::hooks, crate::require_root,
 };
 
 pub fn cmd_uninstall(dry_run: bool) {

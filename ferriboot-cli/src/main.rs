@@ -1,14 +1,13 @@
-use std::fs::{self};
+use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use crate::bootentry::LOADER_PATH;
-use crate::esp::find_esp;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 mod bootentry;
 mod check;
 mod cmd_install;
 mod cmd_mkconfig;
+mod cmd_set;
 mod cmd_uninstall;
 mod cmdline;
 mod efivars;
@@ -24,8 +23,7 @@ mod uki;
 #[derive(Parser)]
 #[command(
     version,
-    about,
-    after_help = "install, mkconfig and uninstall need root: sudo ferriboot <command>"
+    after_help = "install, mkconfig, set and uninstall need root: sudo ferriboot <command>"
 )]
 struct Cli {
     /// show what would be done without changing anything
@@ -33,6 +31,12 @@ struct Cli {
     dry_run: bool,
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Clone, ValueEnum)]
+enum SettingKey {
+    Timeout,
+    Default,
 }
 
 #[derive(Subcommand)]
@@ -59,9 +63,17 @@ enum Command {
     /// hook and /usr/local/bin/ferriboot
     Uninstall,
 
-    /// show whether ferriboot is installed and how the last boot went;
+    /// show whether ferriboot is installed and how the last boot went
     Status,
+    /// check that every file in the config exists on the ESP
     Check,
+    /// change a setting in /etc/ferriboot.conf and regenerate the config
+    Set {
+        /// setting to change
+        key: SettingKey,
+        /// new value
+        value: String,
+    },
 }
 
 fn installed_by_package(exe: &Path) -> bool {
@@ -95,6 +107,9 @@ fn main() {
         Command::Uninstall => cmd_uninstall::cmd_uninstall(cli.dry_run),
         Command::Status => status::cmd_status(),
         Command::Check => check::cmd_check(),
+        Command::Set { key, value } => {
+            cmd_set::cmd_set(key, &value, cli.dry_run);
+        }
     }
 }
 

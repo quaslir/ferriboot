@@ -1,7 +1,7 @@
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use {
-    crate::LOADER_PATH, crate::bootentry, crate::cmd_mkconfig, crate::die, crate::esp,
+    crate::bootentry, crate::bootentry::LOADER_PATH, crate::cmd_mkconfig, crate::die, crate::esp,
     crate::hooks, crate::installed_by_package, crate::require_root,
 };
 

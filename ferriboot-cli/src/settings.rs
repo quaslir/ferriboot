@@ -68,10 +68,21 @@ pub fn load() -> Result<Settings, String> {
     }
 }
 
+pub fn to_text(settings: &Settings) -> String {
+    let mut result = String::new();
+    if let Some(timeout) = &settings.timeout {
+        result += &format!("timeout: {}\n", timeout);
+    };
+    if let Some(default) = &settings.default {
+        result += &format!("default: {}\n", default);
+    }
+    result
+}
+
 #[cfg(test)]
 
 mod tests {
-    use crate::settings::{Settings, apply, parse};
+    use crate::settings::{Settings, apply, parse, to_text};
     use config::Config;
     use config::Entry;
     use config::Protocol;
@@ -169,6 +180,8 @@ mod tests {
     pub fn settings_default() {
         let mut config = fake_config();
         assert_eq!(apply(&mut config, &Settings::default()), None);
+        assert_eq!(config.timeout, 3);
+        assert_eq!(config.default, 0);
     }
 
     #[test]
@@ -203,5 +216,19 @@ mod tests {
             default: Some("not exists".to_string()),
         };
         assert!(apply(&mut config, &settings).is_some());
+    }
+
+    #[test]
+
+    pub fn circle_test() {
+        let settings = Settings {
+            timeout: Some(3),
+            default: Some("Arch Linux (linux-lts)".to_string()),
+        };
+        let parse_result = parse(&to_text(&settings));
+        assert!(parse_result.is_ok());
+        let s = parse_result.unwrap();
+        assert_eq!(s.default, settings.default);
+        assert_eq!(s.timeout, settings.timeout);
     }
 }
