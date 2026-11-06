@@ -1,0 +1,9 @@
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = ferriboot
+
+[Action]
+Description = Updating ferriboot on the ESP...
+When = PostTransaction
+Exec = /usr/bin/ferriboot update --if-installed

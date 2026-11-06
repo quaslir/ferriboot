@@ -23,72 +23,103 @@ mod uki;
 /// UEFI bootloader for Linux: install and configure ferriboot
 #[derive(Parser)]
 #[command(
+    name = "ferriboot",
     version,
-    after_help = "install, mkconfig, set and uninstall need root: sudo ferriboot <command>"
+    about,
+    propagate_version = true,
+    arg_required_else_help = true,
+    after_help = "\
+Examples:
+  sudo ferriboot install          install ferriboot and generate the boot menu
+  ferriboot status                show the installation state and the last boot
+  sudo ferriboot set timeout 5    show the menu for 5 seconds
+  sudo ferriboot update           copy a newer ferriboot.efi to the ESP
+
+install, uninstall, mkconfig, set and update need root.
+Settings are stored in /etc/ferriboot.conf.
+Source: https://github.com/quaslir/ferriboot"
 )]
 struct Cli {
-    /// show what would be done without changing anything
+    /// Show what would be done without changing anything
     #[arg(long, global = true)]
     dry_run: bool,
+
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Clone, ValueEnum)]
 enum SettingKey {
+    /// Menu timeout in seconds (0 boots the default entry immediately)
     Timeout,
+    /// Name of the menu entry to boot by default
     Default,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// install the bootloader to the ESP, generate the config, register a
-    /// firmware boot entry, copy ferriboot to /usr/local/bin and install
-    /// the kernel update hook
+    /// Install ferriboot to the ESP and register it in the firmware
+    #[command(long_about = "\
+Install ferriboot to the ESP, generate the boot menu, register a firmware
+boot entry and install the kernel update hook. When ferriboot is not
+installed by a package, the binary is also copied to /usr/local/bin.")]
     Install {
-        /// bootloader image to install
-        #[arg(long, default_value = "/usr/lib/ferriboot/ferriboot.efi")]
-        #[arg(value_name = "PATH")]
+        /// Bootloader image to install
+        #[arg(
+            long,
+            value_name = "PATH",
+            default_value = "/usr/lib/ferriboot/ferriboot.efi"
+        )]
         efi: PathBuf,
     },
 
-    /// find kernels, copy them to the ESP if needed and write
-    /// EFI/ferriboot/ferriboot.conf
+    /// Remove ferriboot from the ESP and the firmware boot entries
+    #[command(long_about = "\
+Remove the firmware boot entry, EFI/ferriboot on the ESP, the kernel update
+hook and /usr/local/bin/ferriboot. Make sure another bootloader is installed
+first, otherwise the system will not boot.")]
+    Uninstall,
+
+    /// Regenerate the boot menu from the installed kernels
+    #[command(long_about = "\
+Find kernels, UKIs and Windows Boot Manager, copy kernels to the ESP when
+needed, apply /etc/ferriboot.conf and write EFI/ferriboot/ferriboot.conf.")]
     Mkconfig {
-        /// do nothing unless ferriboot is installed on the ESP
+        /// Do nothing unless ferriboot is installed on the ESP
         #[arg(long)]
         if_installed: bool,
     },
 
-    /// remove the boot entry, EFI/ferriboot on the ESP, the kernel update
-    /// hook and /usr/local/bin/ferriboot
-    Uninstall,
-
-    /// show whether ferriboot is installed and how the last boot went
-    Status,
-    /// check that every file in the config exists on the ESP
-    Check,
-    /// change a setting in /etc/ferriboot.conf and regenerate the config
-    Set {
-        /// setting to change
-        key: SettingKey,
-        /// new value
-        value: String,
-    },
-    ///copy a newer ferriboot.efi to the ESP
+    /// Copy a newer ferriboot.efi to the ESP
     Update {
+        /// New bootloader image
         #[arg(
             long,
-            default_value = "/usr/lib/ferriboot/ferriboot.efi",
-            value_name = "PATH"
+            value_name = "PATH",
+            default_value = "/usr/lib/ferriboot/ferriboot.efi"
         )]
         efi: PathBuf,
-        ///: new bootloader image;
-        ///: do nothing unless ferriboot is installed on the ESP;
+
+        /// Do nothing unless ferriboot is installed on the ESP
+        #[arg(long)]
         if_installed: bool,
     },
-}
 
+    /// Change a setting and regenerate the boot menu
+    Set {
+        /// Setting to change
+        key: SettingKey,
+
+        /// New value
+        value: String,
+    },
+
+    /// Show the installation state and how the last boot went
+    Status,
+
+    /// Check that every file referenced by the boot menu exists
+    Check,
+}
 fn installed_by_package(exe: &Path) -> bool {
     let Ok(res) = fs::canonicalize(exe) else {
         return false;

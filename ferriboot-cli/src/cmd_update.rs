@@ -29,15 +29,18 @@ pub fn cmd_update(efi: &Path, if_installed: bool, dry_run: bool) {
         die("ferriboot is not installed (run: sudo ferriboot install)");
     }
 
-    let first =
-        fs::read(efi).unwrap_or_else(|f| die(&format!("cannot read {}: {}", efi.display(), f)));
-    let second =
-        fs::read(&dest).unwrap_or_else(|f| die(&format!("cannot read {}: {}", dest.display(), f)));
-
-    if first == second {
-        eprintln!("ferriboot: {} is up to date", dest.display());
-        return;
-    }
+    match is_same_file(efi, &dest) {
+        Ok(true) => {
+            eprintln!("ferriboot:   is up to date");
+            return;
+        }
+        Ok(false) => {}
+        Err(e) => die(&format!(
+            "cannot compare {} with {}: {e}",
+            efi.display(),
+            dest.display(),
+        )),
+    };
 
     if dry_run {
         eprintln!("ferriboot: would update {}", dest.display());
@@ -62,4 +65,10 @@ pub fn cmd_update(efi: &Path, if_installed: bool, dry_run: bool) {
         "ferriboot: updated {} (previous version saved as ferriboot.efi.old)",
         dest.display()
     );
+}
+
+pub fn is_same_file(a: &Path, b: &Path) -> std::io::Result<bool> {
+    let a_text = fs::read(a)?;
+    let b_text = fs::read(b)?;
+    Ok(a_text == b_text)
 }

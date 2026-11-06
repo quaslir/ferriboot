@@ -11,7 +11,8 @@ makedepends=('rustup')
 options=('!debug')
 install=ferriboot.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
-        "ferriboot.hook")
+        "ferriboot.hook"
+        "ferriboot-update.hook")
 sha256sums=('ff0e6368bf4263a3b6b8278684e2321fea72e058c77c73708bcb118a15a79f60'
             '9deb6d3fff4e1eb1213d0fbd1babece9078942aac86756845426cabc70636128')
 

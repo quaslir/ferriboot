@@ -1,17 +1,30 @@
+use crate::cmd_update;
 use crate::efivars;
+use std::path::Path;
+const FILE_PATH: &str = "/usr/lib/ferriboot/ferriboot.efi";
 pub fn cmd_status() {
     let Some(esp) = crate::esp::find_esp() else {
-        eprintln!("ESP:          not found (checked /boot, /efi, /boot/efi)");
+        println!("ESP:          not found (checked /boot, /efi, /boot/efi)");
         return;
     };
 
     println!("ESP:          {}", esp.display());
     let file = esp.join("EFI/ferriboot/ferriboot.efi");
     if file.exists() {
-        println!("Bootloader:   installed (EFI/ferriboot/ferriboot.efi)");
+        let copy = Path::new(FILE_PATH);
+        if !copy.exists() {
+            println!("Bootloader:   installed (EFI/ferriboot/ferriboot.efi)");
+        } else {
+            match cmd_update::is_same_file(&file, copy) {
+                Ok(true) => println!("Bootloader: installed, up to date"),
+                Ok(false) => {
+                    println!("Bootloader:   installed, outdated (run: sudo ferriboot update)")
+                }
+                Err(e) => println!("Bootloader:   installed (cannot compare: {e})"),
+            };
+        }
     } else {
-        println!("Bootloader:   not installed (run: sudo ferriboot install");
-        return;
+        println!("Bootloader:   not installed (run: sudo ferriboot install)");
     }
 
     let entry = crate::bootentry::find_entry("ferriboot");

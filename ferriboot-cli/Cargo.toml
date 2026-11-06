@@ -1,6 +1,6 @@
 [package]
 name = "ferriboot-cli"
-description = "Installs ferriboot and generates its configuration"
+description = "UEFI bootloader for Linux: install and configure ferriboot"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

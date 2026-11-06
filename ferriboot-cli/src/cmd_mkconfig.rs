@@ -116,9 +116,15 @@ pub fn cmd_mkconfig(dry_run: bool, if_installed: bool) {
                 die(format!("cannot back up {}: {}", conf_path.display(), e.kind(),).as_str());
             }
         }
-        if let Err(e) = std::fs::write(&conf_path, &text) {
-            die(format!("cannot write {}: {}", conf_path.display(), e.kind()).as_str());
+
+        let tmp = conf_path.with_extension("conf.new");
+        if let Err(e) = std::fs::write(&tmp, &text) {
+            die(format!("cannot write {}: {}", tmp.display(), e.kind()).as_str());
         };
+
+        if let Err(e) = std::fs::rename(&tmp, &conf_path) {
+            die(format!("cannot replace {}: {e}", conf_path.display()).as_str());
+        }
 
         eprintln!(
             "ferriboot: wrote {} ({} entries)",
